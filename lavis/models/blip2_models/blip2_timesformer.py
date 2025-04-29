@@ -206,7 +206,7 @@ class Blip2TimeSformer(Blip2Base):
         )
 
         if "image_id" in samples.keys(): #coco retrieval finetuning
-            video_ids = torch.tensor(samples["image_id"].view(-1,1))
+            video_ids = torch.tensor(samples["image_id"]).view(-1,1)
             video_ids_all = concat_all_gather(video_ids)
             pos_idx = torch.eq(video_ids, video_ids_all.t()).float()       
             sim_targets = pos_idx / pos_idx.sum(1,keepdim=True)   
