@@ -215,13 +215,13 @@ class Blip2TimeSformer(Blip2Base):
             loss_t2i = -torch.sum(F.log_softmax(sim_t2i, dim=1)*sim_targets,dim=1).mean()
             loss_i2t = -torch.sum(F.log_softmax(sim_i2t, dim=1)*sim_targets,dim=1).mean()     
             loss_itc = (loss_t2i+loss_i2t)/2
-            print("ok")
+            
         else:
             loss_itc = (
                 F.cross_entropy(sim_i2t, targets, label_smoothing=0.1)
                 + F.cross_entropy(sim_t2i, targets, label_smoothing=0.1)
             ) / 2
-            print("not ook")
+            
         
         
         ###============== Video-text Matching ===================###
