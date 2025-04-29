@@ -1,0 +1,37 @@
+ # Copyright (c) 2022, salesforce.com, inc.
+ # All rights reserved.
+ # SPDX-License-Identifier: BSD-3-Clause
+ # For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3Clause
+
+datasets:
+  msrvtt_retrieval:
+    data_type: videos
+    build_info:
+      annotations:
+        train:
+          storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/msrvtt_ret_train7k.json"
+        test:
+          storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/msrvtt_ret_test1k.json"
+      videos:
+        train:
+          storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/videos/train"
+        test:
+          storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/videos/test"
+    
+    vis_processor:
+        train:
+          name: "alpro_video_train"
+          n_frms: 8
+          image_size: 224
+          min_scale: 0.5
+          max_scale: 1.0
+        eval:
+          name: "alpro_video_eval"
+          n_frms: 8
+          image_size: 224
+    
+    text_processor:
+        train:
+          name: "blip_caption"
+        eval:
+          name: "blip_caption"
