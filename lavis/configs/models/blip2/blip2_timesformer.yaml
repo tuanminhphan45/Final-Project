@@ -11,7 +11,7 @@ model:
   freeze_vit: True
   
   # Q-Former settings
-  num_query_token: 72
+  num_query_token: 32
   cross_attention_freq: 2
   embed_dim: 768
   max_txt_len: 32

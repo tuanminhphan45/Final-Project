@@ -125,6 +125,7 @@ class Blip2TimeSformer(Blip2Base):
                 - text_input (list): List of text strings
         """
         video = samples["video"]  # [B, T, C, H, W]
+        text = samples["text_input"]
 
         if video.dim() != 5:
           raise ValueError(f"Expect 5‑D video tensor, got {video.shape}")
@@ -151,12 +152,13 @@ class Blip2TimeSformer(Blip2Base):
             query_embeds=query_tokens,
             encoder_hidden_states=video_embeds,
             encoder_attention_mask=video_atts,
+            use_cache=True,
             return_dict=True,
         )
         # Project features to embedding space
         video_feats = F.normalize(self.vision_proj(query_output.last_hidden_state), dim=-1)
-        # Text processing - match blip2_qformer.py implementation
-        text = samples["text_input"]
+
+        
         text_tokens = self.tokenizer(
             text,
             padding="max_length",
@@ -358,7 +360,6 @@ class Blip2TimeSformer(Blip2Base):
         logger = logging.getLogger(__name__)
         
         if not hasattr(samples, "get"):
-            # Convert tensor to dictionary if needed
             video = samples
             samples = {"video": video}
         else:
@@ -368,7 +369,7 @@ class Blip2TimeSformer(Blip2Base):
             logger.error("No video provided for caption generation")
             return ["No video provided"]
         
-        
+        B = video.size(0)
         video_embeds = self.ln_vision(self.visual_encoder.forward_features(video))
 
         if not use_nucleus_sampling:
@@ -386,12 +387,23 @@ class Blip2TimeSformer(Blip2Base):
             "encoder_attention_mask": video_atts,
         }
 
-        input_ids = (
-            torch.LongTensor(video.size(0), 1)
-            .fill_(self.tokenizer.bos_token_id)
-            .to(video.device)
+        # input_ids = (
+        #     torch.LongTensor(video.size(0), 1)
+        #     .fill_(self.tokenizer.bos_token_id)
+        #     .to(video.device)
+        # )
+       # First‐token ids (B,1)
+       
+        input_ids = torch.full(
+            (B, 1),
+            fill_value=self.tokenizer.bos_token_id,
+            dtype=torch.long,
+            device=video.device,
         )
-        
+        # match the batch dimension of video_embeds when doing beam search
+        if not use_nucleus_sampling:
+            input_ids = input_ids.repeat_interleave(num_beams, dim=0)
+
         query_tokens = self.query_tokens.expand(video_embeds.shape[0], -1, -1)
         
         outputs = self.Qformer.generate(
@@ -410,7 +422,7 @@ class Blip2TimeSformer(Blip2Base):
         captions = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
         return captions
     def forward_video(self, video):
-        video_embeds = self.visual_encoder.forward_features(video)
+        video_embeds = self.ln_vision(self.visual_encoder.forward_features(video))
         video_atts = torch.ones(video_embeds.size()[:-1], dtype=torch.long).to(
             video.device
         )
@@ -528,7 +540,7 @@ class Blip2TimeSformer(Blip2Base):
         elif mode == "multimodal":
             # return multimodel query features
             with self.maybe_autocast():
-                video_embeds_frozen = self.visual_encoder.forward_features(video)
+                video_embeds_frozen = self.ln_vision(self.visual_encoder.forward_features(video))
             video_embeds_frozen = video_embeds_frozen.float()
             video_atts = torch.ones(
                 video_embeds_frozen.size()[:-1], dtype=torch.long
