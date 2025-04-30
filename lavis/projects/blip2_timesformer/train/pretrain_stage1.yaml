@@ -44,7 +44,7 @@ model:
   use_grad_checkpoint: True
   vit_precision: "fp16"
   freeze_vit: True
-  num_query_token: 256
+  num_query_token: 128
   
   # Pretrained paths
   pretrained_qformer_path: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained.pth"
