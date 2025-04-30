@@ -381,6 +381,7 @@ class Blip2TimeSformer(Blip2Base):
         video_atts = torch.ones(video_embeds.size()[:-1], dtype=torch.long).to(
             video.device
         )
+        video_atts = video_atts.unsqueeze(1).unsqueeze(2)
 
         model_kwargs = {
             "encoder_hidden_states": video_embeds,
