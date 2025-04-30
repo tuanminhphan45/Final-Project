@@ -334,92 +334,90 @@ class Blip2TimeSformer(Blip2Base):
     def generate(
         self,
         samples,
-        use_nucleus_sampling=False,
-        num_beams=3,
-        max_length=30,
-        min_length=10,
-        top_p=0.9,
-        repetition_penalty=1.0,
-        length_penalty=0.0,
-        #**model_kwargs
+        use_nucleus_sampling: bool = False,
+        num_beams: int = 3,
+        max_length: int = 30,
+        min_length: int = 10,
+        top_p: float = 0.9,
+        repetition_penalty: float = 1.0,
+        length_penalty: float = 0.0,
     ):
         """
         Generate captions for video input.
         Args:
-            samples (dict): A dictionary containing the following keys:
-                - video (torch.Tensor): A tensor of shape (B, C, T, H, W)
-            use_nucleus_sampling (bool): Whether to use nucleus sampling. If False, use beam search.
-            num_beams (int): Number of beams for beam search. 1 means no beam search.
-            max_length (int): The maximum length of the sequence to be generated.
-            min_length (int): The minimum length of the sequence to be generated.
-            top_p (float): The cumulative probability for nucleus sampling.
-            repetition_penalty (float): The parameter for repetition penalty. 1.0 means no penalty.
+            samples (dict or Tensor): If dict, expects {"video": Tensor[B,C,T,H,W]};
+                                    otherwise interpreted directly as the video tensor.
+            use_nucleus_sampling: if True, samples with top-p; else uses beam search.
+            num_beams: number of beams (only used when not sampling).
+            max_length/min_length: decoding length bounds.
+            top_p: nucleus sampling probability mass.
+            repetition_penalty: penalize repeated tokens.
+            length_penalty: beam-search length penalty.
         Returns:
-            captions (list): A list of strings of length batch_size.
+            List[str]: decoded captions of length B.
         """
         logger = logging.getLogger(__name__)
-        
+
+        # 1) Unpack video
         if not hasattr(samples, "get"):
             video = samples
-            samples = {"video": video}
         else:
-            video = samples.get("video")
-        
+            video = samples.get("video", None)
         if video is None:
             logger.error("No video provided for caption generation")
             return ["No video provided"]
-        
-        B = video.size(0)
-        video_embeds = self.ln_vision(self.visual_encoder.forward_features(video))
+        batch_size = video.size(0)
 
+        # 2) Encode video → (B, Q, D)
+        video_feats  = self.visual_encoder.forward_features(video)
+        video_embeds = self.ln_vision(video_feats)
+
+        # 3) Tile for beam search if needed
         if not use_nucleus_sampling:
             video_embeds = video_embeds.repeat_interleave(num_beams, dim=0)
         else:
-           num_beams = 1
-           print("use num beams = 1")
-        
-        video_atts = torch.ones(video_embeds.size()[:-1], dtype=torch.long).to(
-            video.device
+            num_beams = 1
+
+        # 4) Build a 2D encoder_attention_mask: (B * beams, seq_k)
+        seq_k = video_embeds.size(1)
+        encoder_attn_mask = torch.ones(
+            video_embeds.size(0),
+            seq_k,
+            dtype=torch.long,
+            device=video.device
         )
-        video_atts = video_atts.unsqueeze(1).unsqueeze(2)
 
-        model_kwargs = {
-            "encoder_hidden_states": video_embeds,
-            "encoder_attention_mask": video_atts,
-        }
-
-        # input_ids = (
-        #     torch.LongTensor(video.size(0), 1)
-        #     .fill_(self.tokenizer.bos_token_id)
-        #     .to(video.device)
-        # )
-       # First‐token ids (B,1)
-       
+        # 5) Prepare decoder start tokens and tile for beams
         input_ids = torch.full(
-            (B, 1),
+            (batch_size, 1),
             fill_value=self.tokenizer.bos_token_id,
             dtype=torch.long,
-            device=video.device,
+            device=video.device
         )
-        # match the batch dimension of video_embeds when doing beam search
         if not use_nucleus_sampling:
             input_ids = input_ids.repeat_interleave(num_beams, dim=0)
 
-        query_tokens = self.query_tokens.expand(video_embeds.shape[0], -1, -1)
-        
+        # 6) Tile Q-Former’s fixed query tokens to match batch
+        query_embeds = self.query_tokens.expand(video_embeds.size(0), -1, -1)
+
+        # 7) Call HF generate
         outputs = self.Qformer.generate(
-            input_ids=input_ids,
-            query_embeds=query_tokens,
+            input_ids=input_ids,                       # (B*beams, L)
+            query_embeds=query_embeds,                 # (B*beams, Q, D)
+            encoder_hidden_states=video_embeds,        # (B*beams, Q, D)
+            encoder_attention_mask=encoder_attn_mask,  # (B*beams, Q)
             max_length=max_length,
             min_length=min_length,
             num_beams=num_beams,
             do_sample=use_nucleus_sampling,
             top_p=top_p,
+            repetition_penalty=repetition_penalty,
+            length_penalty=length_penalty,
             eos_token_id=self.tokenizer.sep_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
-            length_penalty=length_penalty,
-            **model_kwargs
         )
+
+        # 8) Decode output IDs to strings
         captions = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
         return captions
     def forward_video(self, video):
