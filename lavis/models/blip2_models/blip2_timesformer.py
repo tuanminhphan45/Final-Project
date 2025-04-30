@@ -145,8 +145,6 @@ class Blip2TimeSformer(Blip2Base):
         
         logger = logging.getLogger(__name__)
         # Prepare query tokens
-        
-        # Prepare query tokens
         query_tokens = self.query_tokens.expand(video_embeds.shape[0], -1, -1)
 
         query_output = self.Qformer.bert(
@@ -370,15 +368,14 @@ class Blip2TimeSformer(Blip2Base):
             logger.error("No video provided for caption generation")
             return ["No video provided"]
         
-       # logger.info(f"Generating captions for video with shape {video.shape}")
         
-        
-        video_embeds = self.visual_encoder.forward_features(video)
+        video_embeds = self.ln_vision(self.visual_encoder.forward_features(video))
 
-        #if not use_nucleus_sampling:
-            #video_embeds = video_embeds.repeat_interleave(num_beams, dim=0)
-        #else:
-           # num_beams = 1
+        if not use_nucleus_sampling:
+            video_embeds = video_embeds.repeat_interleave(num_beams, dim=0)
+        else:
+           num_beams = 1
+           print("use num beams = 1")
         
         video_atts = torch.ones(video_embeds.size()[:-1], dtype=torch.long).to(
             video.device
@@ -394,9 +391,9 @@ class Blip2TimeSformer(Blip2Base):
             .fill_(self.tokenizer.bos_token_id)
             .to(video.device)
         )
-        #query_tokens = self.query_tokens.expand(video_embeds.shape[0], -1, -1)
-        query_tokens = self.query_tokens.expand(video.size(0), -1, -1)
-        #query_attn   = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(video.device)
+        
+        query_tokens = self.query_tokens.expand(video_embeds.shape[0], -1, -1)
+        
         outputs = self.Qformer.generate(
             input_ids=input_ids,
             query_embeds=query_tokens,
