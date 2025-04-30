@@ -34,7 +34,7 @@ model:
     image_size: 224
     patch_size: 16
     num_frames: 8
-    attn_drop_rate: 00
+    attn_drop_rate: 0.0
     drop_rate: 0.1
     drop_path_rate: 0.1
     n_frms: 8
@@ -44,7 +44,7 @@ model:
   use_grad_checkpoint: True
   vit_precision: "fp16"
   freeze_vit: True
-  num_query_token: 128
+  num_query_token: 256
   
   # Pretrained paths
   pretrained_qformer_path: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained.pth"
@@ -52,8 +52,8 @@ model:
 
 run:
   task: "captioning"
-  batch_size_train: 27
-  batch_size_eval: 27
+  batch_size_train: 32
+  batch_size_eval: 32
   num_workers: 4
   load_gt_from_file: true
   annotation_file: "/storage/student10/vidcaption/LAVIS/cache/msrvtt_caption_gt/msrvtt_caption_test_annotations.json"  
