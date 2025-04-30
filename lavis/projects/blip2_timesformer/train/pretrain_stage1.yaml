@@ -44,7 +44,7 @@ model:
   use_grad_checkpoint: True
   vit_precision: "fp16"
   freeze_vit: True
-  num_query_token: 160
+  num_query_token: 256
   
   # Pretrained paths
   pretrained_qformer_path: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained.pth"
@@ -52,9 +52,9 @@ model:
 
 run:
   task: "captioning"
-  batch_size_train: 28
-  batch_size_eval: 28
-  num_workers: 4
+  batch_size_train: 27
+  batch_size_eval: 27
+  num_workers: 3
   load_gt_from_file: true
   annotation_file: "/storage/student10/vidcaption/LAVIS/cache/msrvtt_caption_gt/msrvtt_caption_test_annotations.json"  
   max_epoch: 20
@@ -84,7 +84,7 @@ run:
   valid_splits: ["test"]
 
   device: "cuda"
-  world_size: 4
+  world_size: 3
   dist_url: "env://"
   distributed: True
   
