@@ -23,7 +23,7 @@ def main():
     model = Blip2TimeSformer(
         vit_model="timesformer",
         img_size=224,
-        num_frames=16,
+        num_frames=8,
         drop_path_rate=0.1,
         use_grad_checkpointing=False,
         vit_precision="fp16",
@@ -52,7 +52,7 @@ def main():
     model.eval()
 
     # 4. Chuẩn bị video processor
-    video_processor = AlproVideoEvalProcessor(image_size=224, n_frms=16, full_video=True)
+    video_processor = AlproVideoEvalProcessor(image_size=224, n_frms=8, full_video=True)
 
     # 5. Xử lý video
     processed = video_processor(args.video)                         # [C,T,H,W]
