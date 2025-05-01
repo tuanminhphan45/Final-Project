@@ -335,8 +335,8 @@ class Blip2TimeSformer(Blip2Base):
         self,
         samples,
         use_nucleus_sampling: bool = False,
-        num_beams: int = 3,
-        max_length: int = 30,
+        num_beams: int = 5,
+        max_length: int = 50,
         min_length: int = 10,
         top_p: float = 0.9,
         repetition_penalty: float = 1.0,
@@ -375,7 +375,7 @@ class Blip2TimeSformer(Blip2Base):
         if not use_nucleus_sampling:
             video_embeds = video_embeds.repeat_interleave(num_beams, dim=0)
         else:
-            num_beams = 1
+            num_beams = 10
 
         video_atts = torch.ones(video_embeds.size()[:-1], dtype=torch.long).to(
             video.device
@@ -395,27 +395,9 @@ class Blip2TimeSformer(Blip2Base):
         # 6) Tile Q-Former’s fixed query tokens to match batch
         query_tokens = self.query_tokens.expand(video_embeds.size(0), -1, -1)
 
-        query_mask = torch.ones(
-            query_tokens.size(0),         # batch size
-            query_tokens.size(1),         # num_query_tokens
-            dtype=torch.long,
-            device=query_tokens.device
-        )
-
-        # 2. Build your text mask (here just a single BOS token, so it’s all ones)
-        text_mask = torch.ones(
-            input_ids.size(0),             # batch size
-            input_ids.size(1),             # seq length (usually 1 for BOS)
-            dtype=torch.long,
-            device=input_ids.device
-        )
-
-        # 3. Concatenate them yourself, along dim=1
-        combined_attention_mask = torch.cat([query_mask, text_mask], dim=1)
         # 7) Call HF generate
         outputs = self.Qformer.generate(
             input_ids=input_ids,
-            attention_mask=combined_attention_mask,
             query_embeds=query_tokens,
             max_length=max_length,
             min_length=min_length,
