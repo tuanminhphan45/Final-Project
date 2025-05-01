@@ -369,55 +369,46 @@ class Blip2TimeSformer(Blip2Base):
         batch_size = video.size(0)
 
         # 2) Encode video → (B, Q, D)
-        video_feats  = self.visual_encoder.forward_features(video)
-        video_embeds = self.ln_vision(video_feats)
+        video_embeds = self.ln_vision(self.visual_encoder.forward_features(video))
 
         # 3) Tile for beam search if needed
         if not use_nucleus_sampling:
             video_embeds = video_embeds.repeat_interleave(num_beams, dim=0)
         else:
-            num_beams = 1
+            num_beams = 10
 
-        # 4) Build a 2D encoder_attention_mask: (B * beams, seq_k)
-        seq_k = video_embeds.size(1)
-        encoder_attn_mask = torch.ones(
-            video_embeds.size(0),
-            seq_k,
-            dtype=torch.long,
-            device=video.device
+        video_atts = torch.ones(video_embeds.size()[:-1], dtype=torch.long).to(
+            video.device
         )
 
-        # 5) Prepare decoder start tokens and tile for beams
-        input_ids = torch.full(
-            (batch_size, 1),
-            fill_value=self.tokenizer.bos_token_id,
-            dtype=torch.long,
-            device=video.device
+        model_kwargs = {
+            "encoder_hidden_states": video_embeds,
+            "encoder_attention_mask": video_atts,
+        }
+        
+        input_ids = (
+            torch.LongTensor(video.size(0), 1)
+            .fill_(self.tokenizer.bos_token_id)
+            .to(video.device)
         )
-        if not use_nucleus_sampling:
-            input_ids = input_ids.repeat_interleave(num_beams, dim=0)
 
         # 6) Tile Q-Former’s fixed query tokens to match batch
-        query_embeds = self.query_tokens.expand(video_embeds.size(0), -1, -1)
+        query_tokens = self.query_tokens.expand(video_embeds.size(0), -1, -1)
 
         # 7) Call HF generate
         outputs = self.Qformer.generate(
-            input_ids=input_ids,                       # (B*beams, L)
-            query_embeds=query_embeds,                 # (B*beams, Q, D)
-            encoder_hidden_states=video_embeds,        # (B*beams, Q, D)
-            encoder_attention_mask=encoder_attn_mask,  # (B*beams, Q)
+            input_ids=input_ids,
+            query_embeds=query_tokens,
             max_length=max_length,
             min_length=min_length,
             num_beams=num_beams,
             do_sample=use_nucleus_sampling,
             top_p=top_p,
-            repetition_penalty=repetition_penalty,
-            length_penalty=length_penalty,
             eos_token_id=self.tokenizer.sep_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
+            **model_kwargs
         )
 
-        # 8) Decode output IDs to strings
         captions = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
         return captions
     def forward_video(self, video):
