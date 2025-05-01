@@ -310,8 +310,8 @@ class Blip2TimeSformer(Blip2Base):
         query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(
             video.device
         )
-        #attention_mask = torch.cat([query_atts, text_tokens.attention_mask], dim=1)
-        attention_mask = text_tokens.attention_mask
+        attention_mask = torch.cat([query_atts, text_tokens.attention_mask], dim=1)
+        #attention_mask = text_tokens.attention_mask
         lm_output = self.Qformer(
             decoder_input_ids,
             attention_mask=attention_mask,
