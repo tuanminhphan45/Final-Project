@@ -1,91 +1,91 @@
 datasets:
-  msrvtt_caption:
-    data_type: videos
-    build_info:
-      annotations:
-        train:
-          storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/cap_train.json"
-        val:
-           storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/cap_val.json"
-        test:
-          storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/cap_test.json"
-      videos:
-        storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/videos" 
-    vis_processor:
-      train:
-        name: "alpro_video_train"
-        image_size: 224
-        n_frms: 8
-      eval:
-        name: "alpro_video_eval"
-        image_size: 224
-        n_frms: 8
-    text_processor:
-      train:
-        name: "blip_caption"
-      eval:
-        name: "blip_caption"
+    msrvtt_caption:
+        data_type: videos
+        build_info:
+            annotations:
+                train:
+                    storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/cap_train.json"
+                val:
+                    storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/cap_val.json"
+                test:
+                    storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/cap_test.json"
+            videos:
+                storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/videos"
+        vis_processor:
+            train:
+                name: "alpro_video_train"
+                image_size: 224
+                n_frms: 8
+            eval:
+                name: "alpro_video_eval"
+                image_size: 224
+                n_frms: 8
+        text_processor:
+            train:
+                name: "blip_caption"
+            eval:
+                name: "blip_caption"
 
 model:
-  arch: blip2_timesformer 
-  model_type: pretrain
+    arch: blip2_timesformer
+    model_type: pretrain
 
-  timesformer:
+    timesformer:
+        image_size: 224
+        patch_size: 16
+        num_frames: 8
+        attn_drop_rate: 0.0
+        drop_rate: 0.1
+        drop_path_rate: 0.1
+        n_frms: 8
+
     image_size: 224
-    patch_size: 16
-    num_frames: 8
-    attn_drop_rate: 0.0
-    drop_rate: 0.1
-    drop_path_rate: 0.1
-    n_frms: 8
+    drop_path_rate: 0
+    use_grad_checkpoint: True
+    vit_precision: "fp16"
+    freeze_vit: True
+    num_query_token: 128
 
-  image_size: 224
-  drop_path_rate: 0
-  use_grad_checkpoint: True
-  vit_precision: "fp16"
-  freeze_vit: True
-  num_query_token: 128
-  
-  # Pretrained paths
-  pretrained_qformer_path: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained.pth"
-  timesformer_pretrained: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/ALPRO/alpro_pretrain.pt"
+    # Pretrained paths
+    pretrained_qformer_path: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained.pth"
+    timesformer_pretrained: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/ALPRO/alpro_pretrain.pt"
 
 run:
-  task: "captioning"
-  batch_size_train: 27
-  batch_size_eval: 27
-  num_workers: 3
-  load_gt_from_file: true
-  annotation_file: "/storage/student10/vidcaption/LAVIS/cache/msrvtt_caption_gt/msrvtt_caption_test_annotations.json"  
-  max_epoch: 1
-  lr_sched: "linear_warmup_cosine_lr"
-  init_lr: 5e-5
-  min_lr: 5e-6
-  
-  seed: 42
-  output_dir: "output/BLIP2_TimeSformer/pretrain_stage1"
-  
-  optimizer:
-    name: adamw
-    lr: 5e-5
-    weight_decay: 0.05
-    beta1: 0.9
-    beta2: 0.999
+    task: "captioning"
+    batch_size_train: 27
+    batch_size_eval: 27
+    num_workers: 3
+    load_gt_from_file: true
+    annotation_file: "/storage/student10/vidcaption/LAVIS/cache/msrvtt_caption_gt/msrvtt_caption_test_annotations.json"
+    max_epoch: 20
+    lr_sched: "linear_warmup_cosine_lr"
+    init_lr: 5e-5
+    min_lr: 5e-6
 
-  scheduler:
-    name: cosine
-    num_warmup_steps: 2500
+    seed: 42
+    output_dir: "output/BLIP2_TimeSformer/pretrain_stage1"
 
-  amp: True
-  resume_ckpt_path: null
+    optimizer:
+        name: adamw
+        lr: 5e-5
+        weight_decay: 0.05
+        beta1: 0.9
+        beta2: 0.999
 
-  evaluate: False
-  train_splits: ["train"]
-  valid_splits: ["test"]
+    scheduler:
+        name: cosine
+        num_warmup_steps: 2500
 
-  device: "cuda"
-  world_size: 3
-  dist_url: "env://"
-  distributed: True
-  
-  warmup_steps: 5000
+    amp: True
+    resume_ckpt_path: null
+
+    evaluate: False
+    train_splits: ["train"]
+    valid_splits: ["test"]
+
+    device: "cuda"
+    world_size: 3
+    dist_url: "env://"
+    distributed: True
+
+    warmup_steps: 5000
