@@ -372,10 +372,10 @@ class Blip2TimeSformer(Blip2Base):
         video_embeds = self.ln_vision(self.visual_encoder.forward_features(video))
 
         # 3) Tile for beam search if needed
-        # if not use_nucleus_sampling:
-        #     video_embeds = video_embeds.repeat_interleave(num_beams, dim=0)
-        # else:
-        #     num_beams = 10
+        if not use_nucleus_sampling:
+            video_embeds = video_embeds.repeat_interleave(num_beams, dim=0)
+        else:
+            num_beams = 10
 
         video_atts = torch.ones(video_embeds.size()[:-1], dtype=torch.long).to(
             video.device
