@@ -54,7 +54,7 @@ run:
     task: "captioning"
     batch_size_train: 27
     batch_size_eval: 27
-    num_workers: 3
+    num_workers: 4
     load_gt_from_file: true
     annotation_file: "/storage/student10/vidcaption/LAVIS/cache/msrvtt_caption_gt/msrvtt_caption_test_annotations.json"
     max_epoch: 20
@@ -84,7 +84,7 @@ run:
     valid_splits: ["test"]
 
     device: "cuda"
-    world_size: 3
+    world_size: 4
     dist_url: "env://"
     distributed: True
 
