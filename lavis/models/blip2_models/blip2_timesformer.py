@@ -385,16 +385,18 @@ class Blip2TimeSformer(Blip2Base):
             "encoder_hidden_states": video_embeds,
             "encoder_attention_mask": video_atts,
         }
-        
-        input_ids = (
-            torch.LongTensor(video.size(0), 1)
-            .fill_(self.tokenizer.bos_token_id)
-            .to(video.device)
+        batch_beam = video_embeds.size(0)
+        input_ids = torch.full(
+            (batch_beam, 1),
+            self.tokenizer.bos_token_id,
+            dtype=torch.long,
+            device=video.device,
         )
 
         # 6) Tile Q-Former’s fixed query tokens to match batch
-        query_tokens = self.query_tokens.expand(video_embeds.size(0), -1, -1)
-
+        # query_tokens = self.query_tokens.expand(video_embeds.size(0), -1, -1)
+        query_tokens = self.query_tokens.expand(video_embeds.shape(0), -1, -1)
+    
         # 7) Call HF generate
         outputs = self.Qformer.generate(
             input_ids=input_ids,
