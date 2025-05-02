@@ -395,7 +395,7 @@ class Blip2TimeSformer(Blip2Base):
 
         # 6) Tile Q-Former’s fixed query tokens to match batch
         # query_tokens = self.query_tokens.expand(video_embeds.size(0), -1, -1)
-        query_tokens = self.query_tokens.expand(video_embeds.shape(0), -1, -1)
+        query_tokens = self.query_tokens.expand(batch_beam, -1, -1)
     
         # 7) Call HF generate
         outputs = self.Qformer.generate(
