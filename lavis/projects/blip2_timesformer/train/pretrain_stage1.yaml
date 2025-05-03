@@ -52,8 +52,8 @@ model:
 
 run:
     task: "captioning"
-    batch_size_train: 27
-    batch_size_eval: 27
+    batch_size_train: 32
+    batch_size_eval: 32
     num_workers: 4
     load_gt_from_file: true
     annotation_file: "/storage/student10/vidcaption/LAVIS/cache/msrvtt_caption_gt/msrvtt_caption_test_annotations.json"
