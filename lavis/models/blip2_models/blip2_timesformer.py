@@ -335,12 +335,11 @@ class Blip2TimeSformer(Blip2Base):
         self,
         samples,
         use_nucleus_sampling: bool = False,
-        num_beams: int = 1,
+        num_beams: int = 3,
         max_length: int = 30,
-        min_length: int = 1,
+        min_length: int = 10,
         top_p: float = 0.9,
         repetition_penalty: float = 1.0,
-        length_penalty: float = 0.0,
     ):
         """
         Generate captions for video input.
