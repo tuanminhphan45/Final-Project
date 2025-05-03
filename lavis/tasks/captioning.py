@@ -113,9 +113,9 @@ class CaptionTask(BaseTask):
             max_length=self.max_len,
             min_length=self.min_len,
             repetition_penalty=self.repetition_penalty,
-            #length_penalty=self.length_penalty,
+            length_penalty=self.length_penalty,
             top_p=self.top_p,
-            #temperature=self.temperature,
+            temperature=self.temperature,
         )
         img_ids = samples[self.sample_id_key]
         for caption, img_id in zip(captions, img_ids):

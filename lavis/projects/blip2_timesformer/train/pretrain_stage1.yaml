@@ -15,11 +15,11 @@ datasets:
             train:
                 name: "alpro_video_train"
                 image_size: 224
-                n_frms: 8
+                n_frms: 4
             eval:
                 name: "alpro_video_eval"
                 image_size: 224
-                n_frms: 8
+                n_frms: 4
         text_processor:
             train:
                 name: "blip_caption"
@@ -33,11 +33,11 @@ model:
     timesformer:
         image_size: 224
         patch_size: 16
-        num_frames: 8
+        num_frames: 4
         attn_drop_rate: 0.0
         drop_rate: 0.1
         drop_path_rate: 0.1
-        n_frms: 8
+        n_frms: 4
 
     image_size: 224
     drop_path_rate: 0
