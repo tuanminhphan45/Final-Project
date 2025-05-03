@@ -375,7 +375,7 @@ class Blip2TimeSformer(Blip2Base):
         if not use_nucleus_sampling:
             video_embeds = video_embeds.repeat_interleave(num_beams, dim=0)
         else:
-            num_beams = 5
+            num_beams = 1
 
         video_atts = torch.ones(video_embeds.size()[:-1], dtype=torch.long).to(
             video.device
