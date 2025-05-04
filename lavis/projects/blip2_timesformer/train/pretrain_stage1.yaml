@@ -59,7 +59,7 @@ run:
     annotation_file: "/storage/student10/vidcaption/LAVIS/cache/msrvtt_caption_gt/msrvtt_caption_test_annotations.json"
     max_epoch: 20
     lr_sched: "linear_warmup_cosine_lr"
-    init_lr: 5e-5
+    init_lr: 1e-5
     min_lr: 5e-6
 
     seed: 42
