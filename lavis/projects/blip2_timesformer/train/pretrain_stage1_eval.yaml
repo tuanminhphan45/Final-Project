@@ -1,3 +1,4 @@
+# Bản sao của pretrain_stage1.yaml với các tùy chỉnh để tránh OOM trong eval
 datasets:
     msrvtt_caption:
         data_type: videos
@@ -19,7 +20,7 @@ datasets:
             eval:
                 name: "alpro_video_eval"
                 image_size: 224
-                n_frms: 8
+                n_frms: 4  # Giảm số frame trong đánh giá để tiết kiệm bộ nhớ
         text_processor:
             train:
                 name: "blip_caption"
@@ -44,7 +45,7 @@ model:
     use_grad_checkpoint: True
     vit_precision: "fp16"
     freeze_vit: True
-    num_query_token: 196
+    num_query_token: 32  # Giảm số query tokens từ 64 xuống 32
 
     # Pretrained paths
     pretrained_qformer_path: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained.pth"
@@ -53,7 +54,7 @@ model:
 run:
     task: "captioning"
     batch_size_train: 32
-    batch_size_eval: 8
+    batch_size_eval: 4  # Giảm batch size evaluation xuống rất thấp
     num_workers: 4
     load_gt_from_file: true
     annotation_file: "/storage/student10/vidcaption/LAVIS/cache/msrvtt_caption_gt/msrvtt_caption_test_annotations.json"
@@ -61,6 +62,10 @@ run:
     lr_sched: "linear_warmup_cosine_lr"
     init_lr: 5e-5
     min_lr: 5e-6
+
+    # Cấu hình đánh giá
+    num_beams: 2  # Giảm số lượng beam từ 5 xuống 2
+    max_len: 20   # Giảm độ dài tối đa của caption
 
     seed: 42
     output_dir: "output/BLIP2_TimeSformer/pretrain_stage1"
@@ -79,7 +84,7 @@ run:
     amp: True
     resume_ckpt_path: null
 
-    evaluate: False
+    evaluate: True  # Bật evaluate để test
     train_splits: ["train"]
     valid_splits: ["test"]
 
@@ -88,4 +93,4 @@ run:
     dist_url: "env://"
     distributed: True
 
-    warmup_steps: 5000
+    warmup_steps: 5000 
