@@ -23,12 +23,12 @@ def main():
     model = Blip2TimeSformer(
         vit_model="timesformer",
         img_size=224,
-        num_frames=8,
+        num_frames=4,
         drop_path_rate=0.1,
         use_grad_checkpointing=False,
         vit_precision="fp16",
         freeze_vit=True,
-        num_query_token=64,
+        num_query_token=256,
         cross_attention_freq=2,
         embed_dim=768,
         max_txt_len=32,
@@ -63,10 +63,10 @@ def main():
     with torch.no_grad(), torch.cuda.amp.autocast():
         caption = model.generate(
             {"video": batch},
-            use_nucleus_sampling=True,
+            use_nucleus_sampling=False,
             num_beams=1,
-            max_length=30,
-            min_length=1,
+            max_length=50,
+            min_length=10,
             top_p=0.9,
             repetition_penalty=1.15,
         )[0]
