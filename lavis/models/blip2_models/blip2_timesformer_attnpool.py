@@ -126,8 +126,9 @@ class Blip2TimeSformerAttnPool(Blip2Base):
             vit_model, img_size, num_frames, drop_path_rate, use_grad_checkpointing, vit_precision
         )
         
-        # Store the num_frames as an attribute
+        # Store the num_frames and img_size as attributes
         self.num_frames = num_frames
+        self.img_size = img_size
         
         # Tạo Temporal Attention Pooling
         self.temporal_pool = TemporalAttentionPooling(

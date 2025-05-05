@@ -5,18 +5,51 @@ model:
   # Temporal Attention Pooling
   attn_pool_heads: 1
   
-  # TimeSformer
+  # Vision encoder (TimeSformer) settings
   vit_model: timesformer
   image_size: 224
-  drop_path_rate: 0
+  num_frames: 8
+  drop_path_rate: 0.1
   use_grad_checkpoint: True
   vit_precision: fp16
   freeze_vit: True
   
-  # QFormer
+  # Q-Former settings
   num_query_token: 32
   cross_attention_freq: 2
-  
-  # Other
   embed_dim: 768
-  max_txt_len: 32 
+  max_txt_len: 32
+  
+  # Load pretrained Q-former weights from BLIP2
+  # Available options:
+  # - "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained.pth"
+  # - "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained_vitL.pth"
+  pretrained_qformer_path: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained.pth"
+  
+  # TimeSformer-specific checkpoint (optional)
+  # ALPRO provides a pretrained TimeSformer model for video processing
+  timesformer_pretrained: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/ALPRO/alpro_pretrain.pt"
+  
+  # TimeSformer configuration (following ALPRO settings)
+  timesformer:
+    n_frms: 8  # Reduced from ALPRO's 16 to match our setting
+    image_size: 224
+    patch_size: 14
+    attn_drop_rate: 0.1
+    drop_rate: 0.1
+    num_frames: 8
+    drop_path_rate: 0.1
+
+preprocess:
+  vis_processor:
+    train:
+      name: "alpro_video_train"
+      image_size: 224
+    eval:
+      name: "alpro_video_eval"
+      image_size: 224
+  text_processor:
+    train:
+      name: "blip_caption"
+    eval:
+      name: "blip_caption" 
