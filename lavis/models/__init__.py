@@ -35,6 +35,7 @@ from lavis.models.blip2_models.blip2 import Blip2Base
 from lavis.models.blip2_models.blip2_opt import Blip2OPT
 from lavis.models.blip2_models.blip2_t5 import Blip2T5
 from lavis.models.blip2_models.blip2_timesformer import Blip2TimeSformer
+from lavis.models.blip2_models.blip2_timesformer_attnpool import Blip2TimeSformerAttnPool
 from lavis.models.blip2_models.blip2_qformer import Blip2Qformer
 from lavis.models.blip2_models.blip2_image_text_matching import Blip2ITM
 
