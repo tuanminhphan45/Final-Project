@@ -225,9 +225,8 @@ class Blip2TimeSformerAttnPool(Blip2Base):
         # Reshape để áp dụng Temporal Attention Pooling
         B = video_embeds_raw.shape[0]
         D = video_embeds_raw.shape[-1]
-        
-        # Tách cls token và patch tokens
-        cls_token = video_embeds_raw[:, 0:1, :]  # [B, 1, D]
+        total_patches = video_embeds_raw.shape[1] - 1  # Tổng số patches
+        actual_T = total_patches // (B * self.num_frames)  # Tính số frames thực tế
         patch_tokens = video_embeds_raw[:, 1:, :]  # [B, T×N, D]
         
         # Tính toán số patches mỗi frame
@@ -236,13 +235,13 @@ class Blip2TimeSformerAttnPool(Blip2Base):
         T = self.num_frames  # Số frames
         
         # Reshape patch_tokens để thể hiện rõ cấu trúc temporal
-        patch_tokens = patch_tokens.reshape(B, T, N, D)  # [B, T, N, D]
+        patch_tokens = patch_tokens.reshape(B, actual_T, N, D)  # [B, T, N, D]
         
         # Áp dụng Temporal Attention Pooling để tổng hợp thông tin từ các frame
         pooled_patches = self.temporal_pool(patch_tokens)  # [B, N, D]
         
         # Combine cls token với pooled patches
-        video_embeds = torch.cat([cls_token, pooled_patches], dim=1)  # [B, 1+N, D]
+        video_embeds = torch.cat([video_embeds_raw[:, 0:1, :], pooled_patches], dim=1)  # [B, 1+N, D]
         
         # Apply layer normalization
         video_embeds = self.ln_vision(video_embeds)
@@ -473,9 +472,8 @@ class Blip2TimeSformerAttnPool(Blip2Base):
         # Reshape để áp dụng Temporal Attention Pooling
         B = video_embeds_raw.shape[0]
         D = video_embeds_raw.shape[-1]
-        
-        # Tách cls token và patch tokens
-        cls_token = video_embeds_raw[:, 0:1, :]  # [B, 1, D]
+        total_patches = video_embeds_raw.shape[1] - 1  # Tổng số patches
+        actual_T = total_patches // (B * self.num_frames)  # Tính số frames thực tế
         patch_tokens = video_embeds_raw[:, 1:, :]  # [B, T×N, D]
         
         # Tính toán số patches mỗi frame
@@ -484,13 +482,13 @@ class Blip2TimeSformerAttnPool(Blip2Base):
         T = self.num_frames  # Số frames
         
         # Reshape patch_tokens để thể hiện rõ cấu trúc temporal
-        patch_tokens = patch_tokens.reshape(B, T, N, D)  # [B, T, N, D]
+        patch_tokens = patch_tokens.reshape(B, actual_T, N, D)  # [B, T, N, D]
         
         # Áp dụng Temporal Attention Pooling để tổng hợp thông tin từ các frame
         pooled_patches = self.temporal_pool(patch_tokens)  # [B, N, D]
         
         # Combine cls token với pooled patches
-        video_embeds = torch.cat([cls_token, pooled_patches], dim=1)  # [B, 1+N, D]
+        video_embeds = torch.cat([video_embeds_raw[:, 0:1, :], pooled_patches], dim=1)  # [B, 1+N, D]
         
         # Apply layer normalization
         video_embeds = self.ln_vision(video_embeds)
