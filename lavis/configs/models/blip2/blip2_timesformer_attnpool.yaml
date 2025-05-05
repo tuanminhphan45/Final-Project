@@ -1,0 +1,22 @@
+model:
+  arch: blip2_timesformer_attnpool
+  model_type: pretrain
+  
+  # Temporal Attention Pooling
+  attn_pool_heads: 1
+  
+  # TimeSformer
+  vit_model: timesformer
+  image_size: 224
+  drop_path_rate: 0
+  use_grad_checkpoint: True
+  vit_precision: fp16
+  freeze_vit: True
+  
+  # QFormer
+  num_query_token: 32
+  cross_attention_freq: 2
+  
+  # Other
+  embed_dim: 768
+  max_txt_len: 32 
