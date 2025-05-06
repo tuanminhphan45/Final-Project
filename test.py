@@ -63,7 +63,7 @@ def main():
     with torch.no_grad(), torch.cuda.amp.autocast():
         caption = model.generate(
             {"video": batch},
-            use_nucleus_sampling=False,
+            use_nucleus_sampling=True,
             num_beams=1,
             max_length=50,
             min_length=10,
