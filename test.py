@@ -52,7 +52,7 @@ def main():
     model.eval()
 
     # 4. Chuẩn bị video processor
-    video_processor = AlproVideoEvalProcessor(image_size=224, n_frms=8, full_video=True)
+    video_processor = AlproVideoEvalProcessor(image_size=224, n_frms=4, full_video=True)
 
     # 5. Xử lý video
     processed = video_processor(args.video)                         # [C,T,H,W]
