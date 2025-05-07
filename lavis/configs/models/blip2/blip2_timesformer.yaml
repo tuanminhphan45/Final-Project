@@ -4,14 +4,14 @@ model:
   # Vision encoder (TimeSformer) settings
   vit_model: timesformer
   image_size: 224
-  num_frames: 8
+  num_frames: 16
   drop_path_rate: 0.1
   use_grad_checkpointing: False
   vit_precision: fp16
   freeze_vit: True
   
   # Q-Former settings
-  num_query_token: 32
+  num_query_token: 128
   cross_attention_freq: 2
   embed_dim: 768
   max_txt_len: 32
@@ -28,12 +28,12 @@ model:
   
   # TimeSformer configuration (following ALPRO settings)
   timesformer:
-    n_frms: 8  # Reduced from ALPRO's 16 to match our setting
+    n_frms: 16  # Reduced from ALPRO's 16 to match our setting
     image_size: 224
     patch_size: 14
     attn_drop_rate: 0.1
     drop_rate: 0.1
-    num_frames: 8
+    num_frames: 16
     drop_path_rate: 0.1
  # Changed from ALPRO's True for simplicity during testing
 
