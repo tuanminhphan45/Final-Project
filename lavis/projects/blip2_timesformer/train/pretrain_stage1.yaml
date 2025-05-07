@@ -15,11 +15,11 @@ datasets:
             train:
                 name: "alpro_video_train"
                 image_size: 224
-                n_frms: 12  # Tăng từ 8 lên 12 (thay vì 16)
+                n_frms: 16  # Tăng từ 8 lên 16
             eval:
                 name: "alpro_video_eval"
                 image_size: 224
-                n_frms: 12  # Tăng từ 8 lên 12 (thay vì 16)
+                n_frms: 16  # Tăng từ 8 lên 16
         text_processor:
             train:
                 name: "blip_caption"
@@ -33,11 +33,11 @@ model:
     timesformer:
         image_size: 224
         patch_size: 16
-        num_frames: 12  # Tăng từ 4 lên 12 (thay vì 16)
+        num_frames: 16  # Tăng từ 4 lên 16
         attn_drop_rate: 0.1  # Thêm attn_drop_rate
         drop_rate: 0.1
         drop_path_rate: 0.1
-        n_frms: 12  # Tăng từ 4 lên 12 (thay vì 16)
+        n_frms: 16  # Tăng từ 4 lên 16
 
     image_size: 224
     drop_path_rate: 0
@@ -53,8 +53,8 @@ model:
 
 run:
     task: "captioning"
-    batch_size_train: 12  # Tăng từ 8 lên 12 (thay vì 16)
-    batch_size_eval: 6  # Tăng từ 4 lên 6 (thay vì 8)
+    batch_size_train: 16  # Tăng từ 8 lên 16
+    batch_size_eval: 8  # Tăng từ 4 lên 8
     num_workers: 4
     load_gt_from_file: true
     annotation_file: "/storage/student10/vidcaption/LAVIS/cache/msrvtt_caption_gt/msrvtt_caption_test_annotations.json"
