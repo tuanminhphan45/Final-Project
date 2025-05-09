@@ -23,12 +23,12 @@ def main():
     model = Blip2TimeSformer(
         vit_model="timesformer",
         img_size=224,
-        num_frames=4,
+        num_frames=16,
         drop_path_rate=0.1,
         use_grad_checkpointing=False,
         vit_precision="fp16",
         freeze_vit=True,
-        num_query_token=256,
+        num_query_token=128,
         cross_attention_freq=2,
         embed_dim=768,
         max_txt_len=32,
@@ -53,7 +53,7 @@ def main():
     model.eval()
 
     # 4. Chuẩn bị video processor
-    video_processor = AlproVideoEvalProcessor(image_size=224, n_frms=4, full_video=True)
+    video_processor = AlproVideoEvalProcessor(image_size=224, n_frms=16, full_video=True)
 
     # 5. Xử lý video
     processed = video_processor(args.video)                         # [C,T,H,W]
@@ -64,7 +64,7 @@ def main():
     with torch.no_grad(), torch.cuda.amp.autocast():
         caption = model.generate(
             {"video": batch},
-            use_nucleus_sampling=True,
+            use_nucleus_sampling=False,
             num_beams=1,
             max_length=50,
             min_length=10,
