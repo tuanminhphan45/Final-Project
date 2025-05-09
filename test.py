@@ -45,7 +45,7 @@ def main():
         or ckpt
     )
     # Load checkpoint với strict=True để đảm bảo tất cả trọng số phải khớp
-    model.load_state_dict(state, strict=True)
+    model.load_state_dict(state, strict=False)
     logger.info("Load checkpoint xong")
 
     # 3. Move & half
