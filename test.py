@@ -5,6 +5,7 @@ import logging
 import argparse
 from lavis.processors.alpro_processors import AlproVideoEvalProcessor
 from lavis.models.blip2_models.blip2_timesformer import Blip2TimeSformer
+import torch.nn.functional as F
 
 # Cấu hình logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -36,17 +37,58 @@ def main():
 
     # 2. Load checkpoint
     logger.info(f"Loading checkpoint từ {args.checkpoint} …")
-    ckpt = torch.load(args.checkpoint, map_location=device)
-    # Hỗ trợ nhiều kiểu key phổ biến
-    state = (
-        ckpt.get("model_state")
-        or ckpt.get("state_dict")
-        or ckpt.get("model")
-        or ckpt
-    )
-    # Load checkpoint với strict=True để đảm bảo tất cả trọng số phải khớp
-    model.load_state_dict(state, strict=False)
-    logger.info("Load checkpoint xong")
+    try:
+        ckpt = torch.load(args.checkpoint, map_location=device)
+        logger.info(f"Cấu trúc checkpoint: {list(ckpt.keys()) if isinstance(ckpt, dict) else 'không phải dict'}")
+        
+        # Hỗ trợ nhiều kiểu key phổ biến
+        if "model" in ckpt:
+            state_dict = ckpt["model"]
+        else:
+            state_dict = ckpt
+        
+        # Xử lý đặc biệt cho keys của TimeSformer
+        spatial_embed_key = "visual_encoder.model.pos_embed"
+        temporal_embed_key = "visual_encoder.model.time_embed"
+        
+        # Lấy thông tin số frames và patches từ mô hình
+        num_patches = (224 // 16) ** 2  # image_size // patch_size
+        num_frames = 16  # n_frms như đã khai báo
+        
+        # Xử lý embedding cho TimeSformer
+        if spatial_embed_key in state_dict and num_patches + 1 != state_dict[spatial_embed_key].size(1):
+            logger.info(f"Điều chỉnh spatial embedding từ {state_dict[spatial_embed_key].size(1)} thành {num_patches + 1}")
+            pos_embed = state_dict[spatial_embed_key]
+            cls_pos_embed = pos_embed[0, 0, :].unsqueeze(0).unsqueeze(1)
+            other_pos_embed = pos_embed[0, 1:, :].unsqueeze(0).transpose(1, 2)
+            new_pos_embed = F.interpolate(other_pos_embed, size=(num_patches), mode="nearest")
+            new_pos_embed = new_pos_embed.transpose(1, 2)
+            new_pos_embed = torch.cat((cls_pos_embed, new_pos_embed), 1)
+            state_dict[spatial_embed_key] = new_pos_embed
+        
+        if temporal_embed_key in state_dict and num_frames != state_dict[temporal_embed_key].size(1):
+            logger.info(f"Điều chỉnh temporal embedding từ {state_dict[temporal_embed_key].size(1)} thành {num_frames}")
+            time_embed = state_dict[temporal_embed_key].transpose(1, 2)
+            new_time_embed = F.interpolate(time_embed, size=(num_frames), mode="nearest")
+            state_dict[temporal_embed_key] = new_time_embed.transpose(1, 2)
+        
+        # Load checkpoint với strict=False
+        missing, unexpected = model.load_state_dict(state_dict, strict=False)
+        if missing:
+            logger.warning(f"Các keys thiếu: {len(missing)} keys")
+            logger.warning(f"Một số keys thiếu: {missing[:10]}...")
+        if unexpected:
+            logger.warning(f"Các keys không mong đợi: {len(unexpected)} keys")
+            logger.warning(f"Một số keys không mong đợi: {unexpected[:10]}...")
+            
+        logger.info("Load checkpoint xong (với strict=False)")
+    except Exception as e:
+        logger.error(f"Lỗi khi load checkpoint: {str(e)}")
+        # Print stack trace
+        import traceback
+        logger.error(traceback.format_exc())
+        # Không dừng chương trình, tiếp tục với mô hình không có checkpoint
+        logger.warning("Tiếp tục mà không load checkpoint")
 
     # 3. Move & half
     model = model.to(device).half()
