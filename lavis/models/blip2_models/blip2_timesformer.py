@@ -392,7 +392,7 @@ class Blip2TimeSformer(Blip2Base):
             device=video.device,
         )
 
-        # 6) Tile Q-Former’s fixed query tokens to match batch
+        # 6) Tile Q-Former's fixed query tokens to match batch
         # query_tokens = self.query_tokens.expand(video_embeds.size(0), -1, -1)
         query_tokens = self.query_tokens.expand(batch_beam, -1, -1)
     
@@ -571,12 +571,12 @@ class Blip2TimeSformer(Blip2Base):
     def from_config(cls, cfg):
         vit_model = cfg.get("vit_model", "timesformer")
         img_size = cfg.get("image_size", 224)
-        num_frames = cfg.get("num_frames", 8)
+        num_frames = cfg.get("num_frames", 16)
         drop_path_rate = cfg.get("drop_path_rate", 0.1)
         use_grad_checkpointing = cfg.get("use_grad_checkpointing", False)
         vit_precision = "fp16"
         freeze_vit = cfg.get("freeze_vit", True)
-        num_query_token = cfg.get("num_query_token", 32)
+        num_query_token = cfg.get("num_query_token", 128)
         cross_attention_freq = cfg.get("cross_attention_freq", 2)
         embed_dim = cfg.get("embed_dim", 768)
         max_txt_len = cfg.get("max_txt_len", 32)
@@ -594,8 +594,25 @@ class Blip2TimeSformer(Blip2Base):
             embed_dim=embed_dim,
             max_txt_len=max_txt_len,
         )
-
-        return model 
+        
+        # Load pretrained weights cho TimeSformer từ config file
+        if hasattr(cfg, "timesformer_pretrained") and cfg.timesformer_pretrained:
+            timesformer_url = cfg.timesformer_pretrained
+            if is_url(timesformer_url) or os.path.isfile(timesformer_url):
+                model.load_timesformer_from_pretrained(timesformer_url)
+            else:
+                logging.warning(f"TimeSformer pretrained path {timesformer_url} không hợp lệ")
+        
+        # Load pretrained weights cho Q-former từ config file
+        if hasattr(cfg, "pretrained_qformer_path") and cfg.pretrained_qformer_path:
+            pretrained_qformer_path = cfg.pretrained_qformer_path
+            if is_url(pretrained_qformer_path) or os.path.isfile(pretrained_qformer_path):
+                model.load_from_pretrained(pretrained_qformer_path, 
+                                           timesformer_url=cfg.get("timesformer_pretrained", None))
+            else:
+                logging.warning(f"Pretrained Q-former path {pretrained_qformer_path} không hợp lệ")
+        
+        return model
 
     def compute_sim_matrix(self, data_loader, task_cfg):
         """
@@ -604,3 +621,115 @@ class Blip2TimeSformer(Blip2Base):
         k_test = task_cfg.k_test
 
         return compute_sim_matrix(model=self, data_loader=data_loader, k_test=k_test)
+
+    def load_timesformer_from_pretrained(self, url_or_filename):
+        """
+        Load pretrained weights cho TimeSformer
+        """
+        from lavis.models.timesformer.helpers import load_state_dict
+        import os
+        
+        logger = logging.getLogger(__name__)
+        logger.info(f"Loading TimeSformer pretrained weights từ {url_or_filename}")
+        
+        if is_url(url_or_filename):
+            cached_file = download_cached_file(
+                url_or_filename, check_hash=False, progress=True
+            )
+            checkpoint = load_state_dict(cached_file)
+        elif os.path.isfile(url_or_filename):
+            checkpoint = load_state_dict(url_or_filename)
+        else:
+            raise RuntimeError("checkpoint url or path is invalid")
+            
+        # Tính toán số patches và frames
+        num_patches = (self.visual_encoder.img_size // self.visual_encoder.patch_size) ** 2
+        num_frames = self.visual_encoder.num_frames
+        
+        # Xử lý embedding cho TimeSformer
+        if "pos_embed" in checkpoint and num_patches + 1 != checkpoint["pos_embed"].size(1):
+            logger.info(f"Điều chỉnh spatial embedding từ {checkpoint['pos_embed'].size(1)} thành {num_patches + 1}")
+            pos_embed = checkpoint["pos_embed"]
+            cls_pos_embed = pos_embed[0, 0, :].unsqueeze(0).unsqueeze(1)
+            other_pos_embed = pos_embed[0, 1:, :].unsqueeze(0).transpose(1, 2)
+            new_pos_embed = F.interpolate(other_pos_embed, size=(num_patches), mode="nearest")
+            new_pos_embed = new_pos_embed.transpose(1, 2)
+            new_pos_embed = torch.cat((cls_pos_embed, new_pos_embed), 1)
+            checkpoint["pos_embed"] = new_pos_embed
+        
+        if "time_embed" in checkpoint and num_frames != checkpoint["time_embed"].size(1):
+            logger.info(f"Điều chỉnh temporal embedding từ {checkpoint['time_embed'].size(1)} thành {num_frames}")
+            time_embed = checkpoint["time_embed"].transpose(1, 2)
+            new_time_embed = F.interpolate(time_embed, size=(num_frames), mode="nearest")
+            checkpoint["time_embed"] = new_time_embed.transpose(1, 2)
+        
+        # Khởi tạo temporal attention nếu cần
+        attention_type = "divided_space_time"
+        if attention_type == "divided_space_time":
+            new_state_dict = checkpoint.copy()
+            for key in checkpoint:
+                if "blocks" in key and "attn" in key:
+                    new_key = key.replace("attn", "temporal_attn")
+                    if not new_key in checkpoint:
+                        new_state_dict[new_key] = checkpoint[key]
+                    else:
+                        new_state_dict[new_key] = checkpoint[new_key]
+                if "blocks" in key and "norm1" in key:
+                    new_key = key.replace("norm1", "temporal_norm1")
+                    if not new_key in checkpoint:
+                        new_state_dict[new_key] = checkpoint[key]
+                    else:
+                        new_state_dict[new_key] = checkpoint[new_key]
+            checkpoint = new_state_dict
+        
+        # Thêm tiền tố "model." vào tất cả keys
+        new_state_dict = {}
+        for key, value in checkpoint.items():
+            new_state_dict[f"model.{key}"] = value
+        
+        # Load weights vào mô hình
+        missing, unexpected = self.visual_encoder.load_state_dict(new_state_dict, strict=False)
+        if missing:
+            logger.warning(f"Missing keys khi load TimeSformer: {len(missing)} keys")
+        if unexpected:
+            logger.warning(f"Unexpected keys khi load TimeSformer: {len(unexpected)} keys")
+        
+        logger.info("TimeSformer pretrained weights loaded successfully")
+        
+    def load_from_pretrained(self, url_or_filename, **kwargs):
+        """
+        Load pretrained weights vào mô hình BLIP2 TimeSformer
+        """
+        if "timesformer_url" in kwargs:
+            # Load TimeSformer pretrained weights trước
+            self.load_timesformer_from_pretrained(kwargs["timesformer_url"])
+        
+        if is_url(url_or_filename):
+            cached_file = download_cached_file(
+                url_or_filename, check_hash=False, progress=True
+            )
+            checkpoint = torch.load(cached_file, map_location="cpu")
+        elif os.path.isfile(url_or_filename):
+            checkpoint = torch.load(url_or_filename, map_location="cpu")
+        else:
+            raise RuntimeError("checkpoint url or path is invalid")
+
+        if "model" in checkpoint:
+            state_dict = checkpoint["model"]
+        else:
+            state_dict = checkpoint
+            
+        # Lọc bỏ các weights của visual_encoder nếu đã load pretrained weights
+        if "timesformer_url" in kwargs:
+            filtered_state_dict = {}
+            for key, value in state_dict.items():
+                if not key.startswith("visual_encoder"):
+                    filtered_state_dict[key] = value
+            state_dict = filtered_state_dict
+        
+        msg = self.load_state_dict(state_dict, strict=False)
+        
+        logging.info("Missing keys {}".format(msg.missing_keys))
+        logging.info("load checkpoint from %s" % url_or_filename)
+        
+        return msg
