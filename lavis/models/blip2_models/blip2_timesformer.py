@@ -620,14 +620,8 @@ class Blip2TimeSformer(Blip2Base):
         
         # TimeSformer weights đã được load trong __init__ nếu timesformer_weight_path được cung cấp
         
-        # Load pretrained weights cho Q-former từ config file
-        if hasattr(cfg, "pretrained_qformer_path") and cfg.pretrained_qformer_path:
-            pretrained_qformer_path = cfg.pretrained_qformer_path
-            if is_url(pretrained_qformer_path) or os.path.isfile(pretrained_qformer_path):
-                # Không cần truyền timesformer_url vì đã load trong __init__
-                model.load_from_pretrained(pretrained_qformer_path)
-            else:
-                logging.warning(f"Pretrained Q-former path {pretrained_qformer_path} không hợp lệ")
+        # BỎ LOAD QFORMER WEIGHTS
+        # Không load pretrained QFormer để tránh lỗi size mismatch
         
         return model
 
