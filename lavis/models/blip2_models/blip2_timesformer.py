@@ -39,7 +39,7 @@ class Blip2TimeSformer(Blip2Base):
         cross_attention_freq=2,
         embed_dim=768,
         max_txt_len=32,
-        
+        timesformer_weight_path=None,
     ):
         super().__init__()
         
@@ -53,6 +53,21 @@ class Blip2TimeSformer(Blip2Base):
         
         # Store the num_frames as an attribute
         self.num_frames = num_frames
+
+        # Tự động load weight cho TimeSformer nếu có đường dẫn
+        if timesformer_weight_path:
+            self.load_timesformer_from_pretrained(timesformer_weight_path)
+        # Nếu không có đường dẫn cụ thể, thử tìm weight mặc định
+        else:
+            default_timesformer_weight = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "timesformer",
+                "pretrained",
+                "alpro_pretrain.pt"
+            )
+            if os.path.exists(default_timesformer_weight):
+                self.load_timesformer_from_pretrained(default_timesformer_weight)
+                logging.info(f"Loaded default TimeSformer weights from {default_timesformer_weight}")
 
         if freeze_vit:
             for name, param in self.visual_encoder.named_parameters():
@@ -580,6 +595,12 @@ class Blip2TimeSformer(Blip2Base):
         cross_attention_freq = cfg.get("cross_attention_freq", 2)
         embed_dim = cfg.get("embed_dim", 768)
         max_txt_len = cfg.get("max_txt_len", 32)
+        
+        # Lấy đường dẫn cho weights của TimeSformer
+        timesformer_weight_path = None
+        if hasattr(cfg, "timesformer_pretrained") and cfg.timesformer_pretrained:
+            if is_url(cfg.timesformer_pretrained) or os.path.isfile(cfg.timesformer_pretrained):
+                timesformer_weight_path = cfg.timesformer_pretrained
 
         model = cls(
             vit_model=vit_model,
@@ -593,22 +614,17 @@ class Blip2TimeSformer(Blip2Base):
             cross_attention_freq=cross_attention_freq,
             embed_dim=embed_dim,
             max_txt_len=max_txt_len,
+            timesformer_weight_path=timesformer_weight_path,
         )
         
-        # Load pretrained weights cho TimeSformer từ config file
-        if hasattr(cfg, "timesformer_pretrained") and cfg.timesformer_pretrained:
-            timesformer_url = cfg.timesformer_pretrained
-            if is_url(timesformer_url) or os.path.isfile(timesformer_url):
-                model.load_timesformer_from_pretrained(timesformer_url)
-            else:
-                logging.warning(f"TimeSformer pretrained path {timesformer_url} không hợp lệ")
+        # TimeSformer weights đã được load trong __init__ nếu timesformer_weight_path được cung cấp
         
         # Load pretrained weights cho Q-former từ config file
         if hasattr(cfg, "pretrained_qformer_path") and cfg.pretrained_qformer_path:
             pretrained_qformer_path = cfg.pretrained_qformer_path
             if is_url(pretrained_qformer_path) or os.path.isfile(pretrained_qformer_path):
-                model.load_from_pretrained(pretrained_qformer_path, 
-                                           timesformer_url=cfg.get("timesformer_pretrained", None))
+                # Không cần truyền timesformer_url vì đã load trong __init__
+                model.load_from_pretrained(pretrained_qformer_path)
             else:
                 logging.warning(f"Pretrained Q-former path {pretrained_qformer_path} không hợp lệ")
         
@@ -641,67 +657,128 @@ class Blip2TimeSformer(Blip2Base):
             checkpoint = load_state_dict(url_or_filename)
         else:
             raise RuntimeError("checkpoint url or path is invalid")
-            
+        
+        # Xử lý đặc biệt cho alpro_msrvtt_qa.pth và các file tương tự
+        # Trường hợp 1: weights của TimeSformer được lưu trong "model.visual_encoder.model.*"
+        if "model.visual_encoder.model.cls_token" in checkpoint:
+            logger.info("Phát hiện cấu trúc AlproQA weights với tiền tố 'model.visual_encoder.model'")
+            new_state_dict = {}
+            for key, value in checkpoint.items():
+                if key.startswith("model.visual_encoder.model."):
+                    new_key = key.replace("model.visual_encoder.model.", "model.")
+                    new_state_dict[new_key] = value
+            checkpoint = new_state_dict
+        # Trường hợp 2: weights của TimeSformer được lưu trong "visual_encoder.model.*"
+        elif "visual_encoder.model.cls_token" in checkpoint:
+            logger.info("Phát hiện cấu trúc weights với tiền tố 'visual_encoder.model'")
+            new_state_dict = {}
+            for key, value in checkpoint.items():
+                if key.startswith("visual_encoder.model."):
+                    new_key = key.replace("visual_encoder.model.", "model.")
+                    new_state_dict[new_key] = value
+            checkpoint = new_state_dict
+        
         # Tính toán số patches và frames
         num_patches = (self.visual_encoder.img_size // self.visual_encoder.patch_size) ** 2
         num_frames = self.visual_encoder.num_frames
         
         # Xử lý embedding cho TimeSformer
-        if "pos_embed" in checkpoint and num_patches + 1 != checkpoint["pos_embed"].size(1):
-            logger.info(f"Điều chỉnh spatial embedding từ {checkpoint['pos_embed'].size(1)} thành {num_patches + 1}")
-            pos_embed = checkpoint["pos_embed"]
+        if "model.pos_embed" in checkpoint and num_patches + 1 != checkpoint["model.pos_embed"].size(1):
+            logger.info(f"Điều chỉnh spatial embedding từ {checkpoint['model.pos_embed'].size(1)} thành {num_patches + 1}")
+            pos_embed = checkpoint["model.pos_embed"]
             cls_pos_embed = pos_embed[0, 0, :].unsqueeze(0).unsqueeze(1)
             other_pos_embed = pos_embed[0, 1:, :].unsqueeze(0).transpose(1, 2)
             new_pos_embed = F.interpolate(other_pos_embed, size=(num_patches), mode="nearest")
             new_pos_embed = new_pos_embed.transpose(1, 2)
             new_pos_embed = torch.cat((cls_pos_embed, new_pos_embed), 1)
-            checkpoint["pos_embed"] = new_pos_embed
+            checkpoint["model.pos_embed"] = new_pos_embed
         
-        if "time_embed" in checkpoint and num_frames != checkpoint["time_embed"].size(1):
-            logger.info(f"Điều chỉnh temporal embedding từ {checkpoint['time_embed'].size(1)} thành {num_frames}")
-            time_embed = checkpoint["time_embed"].transpose(1, 2)
+        if "model.time_embed" in checkpoint and num_frames != checkpoint["model.time_embed"].size(1):
+            logger.info(f"Điều chỉnh temporal embedding từ {checkpoint['model.time_embed'].size(1)} thành {num_frames}")
+            time_embed = checkpoint["model.time_embed"].transpose(1, 2)
             new_time_embed = F.interpolate(time_embed, size=(num_frames), mode="nearest")
-            checkpoint["time_embed"] = new_time_embed.transpose(1, 2)
+            checkpoint["model.time_embed"] = new_time_embed.transpose(1, 2)
         
         # Khởi tạo temporal attention nếu cần
         attention_type = "divided_space_time"
         if attention_type == "divided_space_time":
             new_state_dict = checkpoint.copy()
             for key in checkpoint:
-                if "blocks" in key and "attn" in key:
-                    new_key = key.replace("attn", "temporal_attn")
+                if "model.blocks" in key and "model.blocks.0.attn" in key:
+                    new_key = key.replace("model.blocks.0.attn", "model.blocks.0.temporal_attn")
                     if not new_key in checkpoint:
                         new_state_dict[new_key] = checkpoint[key]
                     else:
                         new_state_dict[new_key] = checkpoint[new_key]
-                if "blocks" in key and "norm1" in key:
-                    new_key = key.replace("norm1", "temporal_norm1")
+                if "model.blocks" in key and "model.blocks.0.norm1" in key:
+                    new_key = key.replace("model.blocks.0.norm1", "model.blocks.0.temporal_norm1")
                     if not new_key in checkpoint:
                         new_state_dict[new_key] = checkpoint[key]
                     else:
                         new_state_dict[new_key] = checkpoint[new_key]
             checkpoint = new_state_dict
         
-        # Thêm tiền tố "model." vào tất cả keys
-        new_state_dict = {}
-        for key, value in checkpoint.items():
-            new_state_dict[f"model.{key}"] = value
-        
         # Load weights vào mô hình
-        missing, unexpected = self.visual_encoder.load_state_dict(new_state_dict, strict=False)
-        if missing:
-            logger.warning(f"Missing keys khi load TimeSformer: {len(missing)} keys")
-        if unexpected:
-            logger.warning(f"Unexpected keys khi load TimeSformer: {len(unexpected)} keys")
+        missing, unexpected = self.visual_encoder.load_state_dict(checkpoint, strict=False)
+        logger.info(f"TimeSformer loaded. Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
+        
+        # Nếu có quá nhiều missing keys, thử cách khác
+        if len(missing) > 100:
+            logger.warning(f"Số lượng missing keys quá lớn ({len(missing)}), thử cách load khác")
+            
+            # Tạo state_dict từ mô hình đã khởi tạo
+            model_keys = self.visual_encoder.state_dict().keys()
+            
+            # In ra một số keys trong cả hai bên để kiểm tra
+            logger.info(f"Một số keys trong model: {list(model_keys)[:5]}")
+            logger.info(f"Một số keys trong checkpoint: {list(checkpoint.keys())[:5]}")
+            
+            # Thử load các blocks với cấu trúc phổ biến
+            common_prefixes = [
+                ("model.", "model."),
+                ("", "model."),
+                ("visual_encoder.model.", "model."),
+                ("model.visual_encoder.model.", "model.")
+            ]
+            
+            best_missing = float('inf')
+            best_state_dict = None
+            
+            for src_prefix, dst_prefix in common_prefixes:
+                new_state_dict = {}
+                src_keys = [k for k in checkpoint.keys() if k.startswith(src_prefix)]
+                
+                for key in src_keys:
+                    if src_prefix:
+                        new_key = key.replace(src_prefix, dst_prefix)
+                    else:
+                        new_key = dst_prefix + key
+                    new_state_dict[new_key] = checkpoint[key]
+                
+                if new_state_dict:  # Chỉ thử nếu có ít nhất một key
+                    try:
+                        missing_test, unexpected_test = self.visual_encoder.load_state_dict(new_state_dict, strict=False)
+                        if len(missing_test) < best_missing:
+                            best_missing = len(missing_test)
+                            best_state_dict = new_state_dict
+                            logger.info(f"Tìm thấy mapping tốt hơn: {src_prefix} -> {dst_prefix} với {len(missing_test)} missing keys")
+                    except Exception as e:
+                        logger.warning(f"Lỗi khi thử prefix {src_prefix}: {str(e)}")
+            
+            if best_state_dict:
+                missing, unexpected = self.visual_encoder.load_state_dict(best_state_dict, strict=False)
+                logger.info(f"TimeSformer loaded với mapping tốt nhất. Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
         
         logger.info("TimeSformer pretrained weights loaded successfully")
         
     def load_from_pretrained(self, url_or_filename, **kwargs):
         """
         Load pretrained weights vào mô hình BLIP2 TimeSformer
+        Lưu ý: Weights cho TimeSformer nên được load thông qua __init__ hoặc load_timesformer_from_pretrained()
         """
-        if "timesformer_url" in kwargs:
-            # Load TimeSformer pretrained weights trước
+        # Không tự động load TimeSformer weights nữa (đã được xử lý trong __init__)
+        # Chỉ truyền vào kwargs["timesformer_url"] nếu muốn ghi đè weights hiện tại
+        if "timesformer_url" in kwargs and kwargs["timesformer_url"]:
             self.load_timesformer_from_pretrained(kwargs["timesformer_url"])
         
         if is_url(url_or_filename):
@@ -719,13 +796,12 @@ class Blip2TimeSformer(Blip2Base):
         else:
             state_dict = checkpoint
             
-        # Lọc bỏ các weights của visual_encoder nếu đã load pretrained weights
-        if "timesformer_url" in kwargs:
-            filtered_state_dict = {}
-            for key, value in state_dict.items():
-                if not key.startswith("visual_encoder"):
-                    filtered_state_dict[key] = value
-            state_dict = filtered_state_dict
+        # Lọc bỏ các weights của visual_encoder để tránh ghi đè lên TimeSformer đã được load
+        filtered_state_dict = {}
+        for key, value in state_dict.items():
+            if not key.startswith("visual_encoder"):
+                filtered_state_dict[key] = value
+        state_dict = filtered_state_dict
         
         msg = self.load_state_dict(state_dict, strict=False)
         
