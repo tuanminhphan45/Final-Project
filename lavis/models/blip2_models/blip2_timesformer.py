@@ -655,8 +655,8 @@ class Blip2TimeSformer(Blip2Base):
         else:
             raise RuntimeError("checkpoint url or path is invalid")
             
-        # In thông tin checkpoint
-        logger.info(f"Checkpoint loaded: {list(checkpoint.keys()) if isinstance(checkpoint, dict) else 'not a dict'}")
+        # Không hiển thị thông tin checkpoint để giảm log
+        # logger.info(f"Checkpoint loaded: {list(checkpoint.keys()) if isinstance(checkpoint, dict) else 'not a dict'}")
         
         # Lấy state_dict
         if "model" in checkpoint:
