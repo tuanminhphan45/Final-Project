@@ -18,6 +18,7 @@ import logging
 import os
 from lavis.common.dist_utils import download_cached_file
 import traceback
+from lavis.common.utils import is_url
 
 
 @registry.register_model("blip2_timesformer")
@@ -640,137 +641,152 @@ class Blip2TimeSformer(Blip2Base):
 
     def load_timesformer_from_pretrained(self, url_or_filename):
         """
-        Load pretrained weights cho TimeSformer
+        Load pretrained weights cho TimeSformer theo cách của AlproBase
         """
-        from lavis.models.timesformer.helpers import load_state_dict
         import os
+        from lavis.common.dist_utils import download_cached_file
+        from lavis.common.utils import is_url
         
         logger = logging.getLogger(__name__)
         logger.info(f"Loading TimeSformer pretrained weights từ {url_or_filename}")
         
+        # Load checkpoint
         if is_url(url_or_filename):
             cached_file = download_cached_file(
                 url_or_filename, check_hash=False, progress=True
             )
-            checkpoint = load_state_dict(cached_file)
+            checkpoint = torch.load(cached_file, map_location="cpu")
         elif os.path.isfile(url_or_filename):
-            checkpoint = load_state_dict(url_or_filename)
+            checkpoint = torch.load(url_or_filename, map_location="cpu")
         else:
             raise RuntimeError("checkpoint url or path is invalid")
+            
+        # In thông tin checkpoint
+        logger.info(f"Checkpoint loaded: {list(checkpoint.keys()) if isinstance(checkpoint, dict) else 'not a dict'}")
         
-        # Xử lý đặc biệt cho alpro_msrvtt_qa.pth và các file tương tự
-        # Trường hợp 1: weights của TimeSformer được lưu trong "model.visual_encoder.model.*"
-        if "model.visual_encoder.model.cls_token" in checkpoint:
-            logger.info("Phát hiện cấu trúc AlproQA weights với tiền tố 'model.visual_encoder.model'")
-            new_state_dict = {}
-            for key, value in checkpoint.items():
-                if key.startswith("model.visual_encoder.model."):
-                    new_key = key.replace("model.visual_encoder.model.", "model.")
-                    new_state_dict[new_key] = value
-            checkpoint = new_state_dict
-        # Trường hợp 2: weights của TimeSformer được lưu trong "visual_encoder.model.*"
-        elif "visual_encoder.model.cls_token" in checkpoint:
-            logger.info("Phát hiện cấu trúc weights với tiền tố 'visual_encoder.model'")
-            new_state_dict = {}
-            for key, value in checkpoint.items():
-                if key.startswith("visual_encoder.model."):
-                    new_key = key.replace("visual_encoder.model.", "model.")
-                    new_state_dict[new_key] = value
-            checkpoint = new_state_dict
-        
-        # Tính toán số patches và frames
+        # Lấy state_dict
+        if "model" in checkpoint:
+            state_dict = checkpoint["model"]
+        else:
+            state_dict = checkpoint
+            
+        # Thông số cần thiết
         num_patches = (self.visual_encoder.img_size // self.visual_encoder.patch_size) ** 2
         num_frames = self.visual_encoder.num_frames
         
-        # Xử lý embedding cho TimeSformer
-        if "model.pos_embed" in checkpoint and num_patches + 1 != checkpoint["model.pos_embed"].size(1):
-            logger.info(f"Điều chỉnh spatial embedding từ {checkpoint['model.pos_embed'].size(1)} thành {num_patches + 1}")
-            pos_embed = checkpoint["model.pos_embed"]
+        # Kiểm tra xem cấu trúc key có đúng không
+        has_visual_encoder_prefix = any(k.startswith("visual_encoder.") for k in state_dict.keys())
+        if not has_visual_encoder_prefix:
+            logger.warning("Không tìm thấy key nào bắt đầu bằng 'visual_encoder.' - có thể cần điều chỉnh cấu trúc key")
+            
+            # Thử thêm tiền tố nếu cần
+            if any(k.startswith("model.") for k in state_dict.keys()):
+                new_state_dict = {}
+                for k, v in state_dict.items():
+                    if k.startswith("model."):
+                        new_state_dict["visual_encoder." + k] = v
+                    else:
+                        new_state_dict[k] = v
+                state_dict = new_state_dict
+                logger.info("Đã thêm tiền tố 'visual_encoder.' cho các key bắt đầu bằng 'model.'")
+        
+        # Xử lý spatial embedding nếu cần
+        spatial_embed_key = "visual_encoder.model.pos_embed"
+        if spatial_embed_key in state_dict and num_patches + 1 != state_dict[spatial_embed_key].size(1):
+            logger.info(f"Điều chỉnh spatial embedding từ {state_dict[spatial_embed_key].size(1)} thành {num_patches + 1}")
+            
+            pos_embed = state_dict[spatial_embed_key]
             cls_pos_embed = pos_embed[0, 0, :].unsqueeze(0).unsqueeze(1)
             other_pos_embed = pos_embed[0, 1:, :].unsqueeze(0).transpose(1, 2)
+            
             new_pos_embed = F.interpolate(other_pos_embed, size=(num_patches), mode="nearest")
             new_pos_embed = new_pos_embed.transpose(1, 2)
             new_pos_embed = torch.cat((cls_pos_embed, new_pos_embed), 1)
-            checkpoint["model.pos_embed"] = new_pos_embed
-        
-        if "model.time_embed" in checkpoint and num_frames != checkpoint["model.time_embed"].size(1):
-            logger.info(f"Điều chỉnh temporal embedding từ {checkpoint['model.time_embed'].size(1)} thành {num_frames}")
-            time_embed = checkpoint["model.time_embed"].transpose(1, 2)
+            
+            state_dict[spatial_embed_key] = new_pos_embed
+            
+        # Xử lý temporal embedding nếu cần
+        temporal_embed_key = "visual_encoder.model.time_embed"
+        if temporal_embed_key in state_dict and num_frames != state_dict[temporal_embed_key].size(1):
+            logger.info(f"Điều chỉnh temporal embedding từ {state_dict[temporal_embed_key].size(1)} thành {num_frames}")
+            
+            time_embed = state_dict[temporal_embed_key].transpose(1, 2)
             new_time_embed = F.interpolate(time_embed, size=(num_frames), mode="nearest")
-            checkpoint["model.time_embed"] = new_time_embed.transpose(1, 2)
+            state_dict[temporal_embed_key] = new_time_embed.transpose(1, 2)
+            
+        # Kiểm tra số lượng key trong visual_encoder 
+        visual_encoder_keys = [k for k in state_dict.keys() if k.startswith('visual_encoder.')]
+        logger.info(f"Số key bắt đầu bằng 'visual_encoder.': {len(visual_encoder_keys)}")
         
-        # Khởi tạo temporal attention nếu cần
+        # Nếu spatial_embed_key không có trong state_dict, có thể cần điều chỉnh lại
+        if spatial_embed_key not in state_dict and len(visual_encoder_keys) == 0:
+            logger.warning(f"Key {spatial_embed_key} không tồn tại trong checkpoint")
+            logger.warning("Thử tìm cấu trúc thay thế...")
+            
+            # Tìm key chứa "pos_embed"
+            pos_embed_keys = [k for k in state_dict.keys() if "pos_embed" in k]
+            if pos_embed_keys:
+                logger.info(f"Tìm thấy key có chứa 'pos_embed': {pos_embed_keys}")
+                
+                # Lấy key pos_embed đầu tiên và tạo cấu trúc mới
+                src_key = pos_embed_keys[0]
+                prefix = src_key.split("pos_embed")[0]
+                
+                # Tạo state_dict mới với tiền tố đúng
+                new_state_dict = {}
+                for k, v in state_dict.items():
+                    if k.startswith(prefix):
+                        new_key = "visual_encoder.model." + k[len(prefix):]
+                        new_state_dict[new_key] = v
+                
+                # Kiểm tra lại
+                if "visual_encoder.model.pos_embed" in new_state_dict:
+                    logger.info("Đã điều chỉnh cấu trúc key thành công!")
+                    state_dict = new_state_dict
+                    
+                    # Điều chỉnh lại embedding nếu cần
+                    if num_patches + 1 != state_dict[spatial_embed_key].size(1):
+                        logger.info(f"Điều chỉnh spatial embedding từ {state_dict[spatial_embed_key].size(1)} thành {num_patches + 1}")
+                        
+                        pos_embed = state_dict[spatial_embed_key]
+                        cls_pos_embed = pos_embed[0, 0, :].unsqueeze(0).unsqueeze(1)
+                        other_pos_embed = pos_embed[0, 1:, :].unsqueeze(0).transpose(1, 2)
+                        
+                        new_pos_embed = F.interpolate(other_pos_embed, size=(num_patches), mode="nearest")
+                        new_pos_embed = new_pos_embed.transpose(1, 2)
+                        new_pos_embed = torch.cat((cls_pos_embed, new_pos_embed), 1)
+                        
+                        state_dict[spatial_embed_key] = new_pos_embed
+        
+        # Khởi tạo chia sẻ weights cho temporal attention nếu cần
         attention_type = "divided_space_time"
         if attention_type == "divided_space_time":
-            new_state_dict = checkpoint.copy()
-            for key in checkpoint:
-                if "model.blocks" in key and "model.blocks.0.attn" in key:
-                    new_key = key.replace("model.blocks.0.attn", "model.blocks.0.temporal_attn")
-                    if not new_key in checkpoint:
-                        new_state_dict[new_key] = checkpoint[key]
-                    else:
-                        new_state_dict[new_key] = checkpoint[new_key]
-                if "model.blocks" in key and "model.blocks.0.norm1" in key:
-                    new_key = key.replace("model.blocks.0.norm1", "model.blocks.0.temporal_norm1")
-                    if not new_key in checkpoint:
-                        new_state_dict[new_key] = checkpoint[key]
-                    else:
-                        new_state_dict[new_key] = checkpoint[new_key]
-            checkpoint = new_state_dict
+            logger.info("Khởi tạo temporal attention từ spatial attention")
+            new_state_dict = state_dict.copy()
+            
+            for key in state_dict:
+                if "visual_encoder.model.blocks" in key and "attn" in key and not "temporal_attn" in key:
+                    new_key = key.replace("attn", "temporal_attn")
+                    if new_key not in state_dict:
+                        new_state_dict[new_key] = state_dict[key]
+                        
+                if "visual_encoder.model.blocks" in key and "norm1" in key and not "temporal_norm1" in key:
+                    new_key = key.replace("norm1", "temporal_norm1")
+                    if new_key not in state_dict:
+                        new_state_dict[new_key] = state_dict[key]
+                        
+            state_dict = new_state_dict
+            
+        # Load state_dict vào mô hình
+        logger.info("Loading weights vào TimeSformer...")
+        missing, unexpected = self.load_state_dict(state_dict, strict=False)
         
-        # Load weights vào mô hình
-        missing, unexpected = self.visual_encoder.load_state_dict(checkpoint, strict=False)
-        logger.info(f"TimeSformer loaded. Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
+        logger.info(f"Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
+        if len(missing) > 0:
+            logger.info(f"Một số missing keys: {missing[:5]}...")
         
-        # Nếu có quá nhiều missing keys, thử cách khác
-        if len(missing) > 100:
-            logger.warning(f"Số lượng missing keys quá lớn ({len(missing)}), thử cách load khác")
-            
-            # Tạo state_dict từ mô hình đã khởi tạo
-            model_keys = self.visual_encoder.state_dict().keys()
-            
-            # In ra một số keys trong cả hai bên để kiểm tra
-            logger.info(f"Một số keys trong model: {list(model_keys)[:5]}")
-            logger.info(f"Một số keys trong checkpoint: {list(checkpoint.keys())[:5]}")
-            
-            # Thử load các blocks với cấu trúc phổ biến
-            common_prefixes = [
-                ("model.", "model."),
-                ("", "model."),
-                ("visual_encoder.model.", "model."),
-                ("model.visual_encoder.model.", "model.")
-            ]
-            
-            best_missing = float('inf')
-            best_state_dict = None
-            
-            for src_prefix, dst_prefix in common_prefixes:
-                new_state_dict = {}
-                src_keys = [k for k in checkpoint.keys() if k.startswith(src_prefix)]
-                
-                for key in src_keys:
-                    if src_prefix:
-                        new_key = key.replace(src_prefix, dst_prefix)
-                    else:
-                        new_key = dst_prefix + key
-                    new_state_dict[new_key] = checkpoint[key]
-                
-                if new_state_dict:  # Chỉ thử nếu có ít nhất một key
-                    try:
-                        missing_test, unexpected_test = self.visual_encoder.load_state_dict(new_state_dict, strict=False)
-                        if len(missing_test) < best_missing:
-                            best_missing = len(missing_test)
-                            best_state_dict = new_state_dict
-                            logger.info(f"Tìm thấy mapping tốt hơn: {src_prefix} -> {dst_prefix} với {len(missing_test)} missing keys")
-                    except Exception as e:
-                        logger.warning(f"Lỗi khi thử prefix {src_prefix}: {str(e)}")
-            
-            if best_state_dict:
-                missing, unexpected = self.visual_encoder.load_state_dict(best_state_dict, strict=False)
-                logger.info(f"TimeSformer loaded với mapping tốt nhất. Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
-        
-        logger.info("TimeSformer pretrained weights loaded successfully")
-        
+        return missing, unexpected
+
     def load_from_pretrained(self, url_or_filename, **kwargs):
         """
         Load pretrained weights vào mô hình BLIP2 TimeSformer
