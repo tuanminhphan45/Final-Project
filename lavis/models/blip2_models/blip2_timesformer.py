@@ -751,9 +751,9 @@ class Blip2TimeSformer(Blip2Base):
                         new_k = "visual_encoder.model." + k[len(prefix):]
                         new_state_dict[new_k] = v
                         visual_encoder_keys.append(new_k)
-        else:
-            logger.warning("Không thể tự động phát hiện cấu trúc key, sử dụng nguyên bản")
-            new_state_dict = state_dict
+            else:
+                logger.warning("Không thể tự động phát hiện cấu trúc key, sử dụng nguyên bản")
+                new_state_dict = state_dict
         
         # Kiểm tra và thông báo số lượng key đã tìm thấy
         logger.info(f"Đã tìm thấy {len(visual_encoder_keys)} key cho visual_encoder")
