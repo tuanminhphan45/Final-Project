@@ -24,7 +24,7 @@ model:
   
   # TimeSformer-specific checkpoint (optional)
   # ALPRO provides a pretrained TimeSformer model for video processing
-  timesformer_pretrained: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/ALPRO/alpro_pretrain.pt"
+  timesformer_pretrained: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/ALPRO/alpro_msrvtt_qa.pth"
   
   # TimeSformer configuration (following ALPRO settings)
   timesformer:
