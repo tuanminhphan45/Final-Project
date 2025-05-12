@@ -49,7 +49,7 @@ model:
 
     # Pretrained paths
     pretrained_qformer_path: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained.pth"
-    timesformer_pretrained: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/ALPRO/alpro_pretrain.pt"
+    timesformer_pretrained: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/ALPRO/alpro_msrvtt_qa.pth"
 
 run:
     task: "captioning"
