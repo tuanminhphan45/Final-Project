@@ -437,12 +437,28 @@ class RunnerBase:
         test_logs = dict()
 
         if len(self.test_splits) > 0:
+            logging.info("====================================================")
+            logging.info("BẮT ĐẦU ĐÁNH GIÁ MODEL")
+            logging.info(f"Epoch: {cur_epoch}, Skip reload: {skip_reload}")
+            logging.info("====================================================")
+            
             for split_name in self.test_splits:
+                logging.info(f"Đánh giá trên split: {split_name}")
                 test_logs[split_name] = self.eval_epoch(
                     split_name=split_name, cur_epoch=cur_epoch, skip_reload=skip_reload
                 )
+                
+                if test_logs[split_name] is not None:
+                    logging.info(f"Kết quả trên {split_name}: {test_logs[split_name].get('agg_metrics', 'N/A')}")
+                else:
+                    logging.info(f"Không có kết quả từ {split_name}")
 
+            logging.info("====================================================")
+            logging.info("HOÀN THÀNH ĐÁNH GIÁ MODEL")
+            logging.info("====================================================")
             return test_logs
+        else:
+            logging.info("Không có test splits được chỉ định, bỏ qua evaluate")
 
     def train_epoch(self, epoch):
         # train
@@ -475,18 +491,42 @@ class RunnerBase:
         data_loader = self.dataloaders.get(split_name, None)
         assert data_loader, "data_loader for split {} is None.".format(split_name)
 
-        # TODO In validation, you need to compute loss as well as metrics
-        # TODO consider moving to model.before_evaluation()
+        logging.info("------------------------------------------------")
+        logging.info(f"ĐÁNH GIÁ MÔ HÌNH TRÊN TẬP DỮ LIỆU: {split_name}")
+        logging.info("------------------------------------------------")
+        
+        # Unwrap model from DDP if needed
         model = self.unwrap_dist_model(self.model)
+        
+        # Check if model has TimeSformer
+        has_timesformer = hasattr(model, "visual_encoder") and hasattr(model.visual_encoder, "forward_features")
+        if has_timesformer:
+            logging.info("✓ Phát hiện: Mô hình có sử dụng TimeSformer")
+        
+        # Check if we need to reload best model
         if not skip_reload and cur_epoch == "best":
+            logging.info(f"Đang load model checkpoint tốt nhất cho evaluation...")
             model = self._reload_best_model(model)
+        else:
+            if skip_reload:
+                logging.info(f"⏩ Bỏ qua load model checkpoint (skip_reload=True)")
+            if cur_epoch != "best":
+                logging.info(f"⏩ Đang sử dụng model từ epoch {cur_epoch} thay vì model tốt nhất")
+        
         model.eval()
+        logging.info("✓ Đã chuyển model sang chế độ evaluation")
 
+        # Before evaluation hooks from task
+        logging.info("Đang chuẩn bị model cho evaluation...")
         self.task.before_evaluation(
             model=model,
             dataset=self.datasets[split_name],
         )
+        logging.info("✓ Đã chuẩn bị xong, bắt đầu đánh giá...")
+
+        # Actual evaluation
         results = self.task.evaluation(model, data_loader)
+        logging.info("✓ Đã hoàn thành đánh giá")
 
         if results is not None:
             return self.task.after_evaluation(
@@ -597,12 +637,19 @@ class RunnerBase:
                 # delete parameters that do not require gradient
                 del state_dict[k]
 
+        # Lưu thêm đường dẫn đến TimeSformer weights nếu có thể
+        timesformer_weight_path = None
+        if hasattr(self.config.model_cfg, "timesformer_pretrained"):
+            timesformer_weight_path = self.config.model_cfg.timesformer_pretrained
+            logging.info(f"✓ Lưu đường dẫn TimeSformer weights: {timesformer_weight_path}")
+
         save_obj = {
             "model": state_dict,
             "optimizer": self.optimizer.state_dict(),
             "config": self.config.to_dict(),
             "scaler": self.scaler.state_dict() if self.scaler else None,
             "epoch": cur_epoch,
+            "timesformer_weight_path": timesformer_weight_path
         }
         save_to = os.path.join(
             self.output_dir,
@@ -613,14 +660,20 @@ class RunnerBase:
 
     def _reload_best_model(self, model):
         """
-        Load the best checkpoint for evaluation.
+        Load the best checkpoint cho evaluation.
         """
         checkpoint_path = os.path.join(self.output_dir, "checkpoint_best.pth")
 
-        logging.info("Loading checkpoint from {}.".format(checkpoint_path))
+        logging.info("=== EVALUATION PHASE ===")
+        logging.info("Loading QFormer checkpoint từ {}.".format(checkpoint_path))
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        
+        # Lưu TimeSformer weights path nếu có trong checkpoint  
+        timesformer_path = checkpoint.get("timesformer_weight_path", None)
+        
         try:
             model.load_state_dict(checkpoint["model"])
+            logging.info("✓ THÀNH CÔNG: Đã load checkpoint QFormer cho evaluation")
         except RuntimeError as e:
             logging.warning(
                 """
@@ -629,11 +682,28 @@ class RunnerBase:
                 """
             )
             model.load_state_dict(checkpoint["model"], strict=False)
+            logging.info("✓ THÀNH CÔNG: Đã load checkpoint QFormer với strict=False")
+        
+        # Nếu model là Blip2TimeSformer và có timesformer_path
+        if hasattr(model, "load_timesformer_from_pretrained") and timesformer_path:
+            if os.path.exists(timesformer_path):
+                logging.info(f"Đang load TimeSformer weights từ {timesformer_path}")
+                try:
+                    missing, unexpected = model.load_timesformer_from_pretrained(timesformer_path)
+                    logging.info(f"✓ THÀNH CÔNG: Đã load TimeSformer weights cho evaluation")
+                    logging.info(f"  - Missing keys: {len(missing)}")
+                    logging.info(f"  - Unexpected keys: {len(unexpected)}")
+                except Exception as e:
+                    logging.error(f"✗ LỖI: Không thể load TimeSformer weights: {str(e)}")
+        else:
+            logging.info("ℹ️ LƯU Ý: Không tìm thấy đường dẫn TimeSformer weights trong checkpoint")
+            logging.info("ℹ️ LƯU Ý: TimeSformer sẽ sử dụng weights được load lúc khởi tạo model")
+            
         return model
 
     def _load_checkpoint(self, url_or_filename):
         """
-        Resume from a checkpoint.
+        Resume from a checkpoint và đảm bảo TimeSformer weight được giữ nguyên
         """
         if is_url(url_or_filename):
             cached_file = download_cached_file(
@@ -645,8 +715,25 @@ class RunnerBase:
         else:
             raise RuntimeError("checkpoint url or path is invalid")
 
+        # Lưu TimeSformer weights path nếu có trong checkpoint
+        timesformer_path = checkpoint.get("timesformer_weight_path", None)
+        
         state_dict = checkpoint["model"]
-        self.unwrap_dist_model(self.model).load_state_dict(state_dict)
+        self.unwrap_dist_model(self.model).load_state_dict(state_dict, strict=False)
+        logging.info(f"✓ Đã load checkpoint QFormer từ {url_or_filename}")
+
+        # Nếu model là Blip2TimeSformer và có timesformer_path
+        model = self.unwrap_dist_model(self.model)
+        if hasattr(model, "load_timesformer_from_pretrained") and timesformer_path:
+            if os.path.exists(timesformer_path):
+                logging.info(f"Đang load TimeSformer weights từ {timesformer_path}")
+                try:
+                    missing, unexpected = model.load_timesformer_from_pretrained(timesformer_path)
+                    logging.info(f"✓ THÀNH CÔNG: Đã load TimeSformer weights")
+                    logging.info(f"  - Missing keys: {len(missing)}")
+                    logging.info(f"  - Unexpected keys: {len(unexpected)}")
+                except Exception as e:
+                    logging.error(f"✗ LỖI: Không thể load TimeSformer weights: {str(e)}")
 
         self.optimizer.load_state_dict(checkpoint["optimizer"])
         if self.scaler and "scaler" in checkpoint:

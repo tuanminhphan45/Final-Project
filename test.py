@@ -14,16 +14,16 @@ logger = logging.getLogger(__name__)
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--video", type=str, required=True, help="Đường dẫn đến file video")
-    parser.add_argument("--checkpoint", type=str, required=True, help="Đường dẫn đến file .pth checkpoint")
+    parser.add_argument("--checkpoint", type=str, required=True, help="Đường dẫn đến file .pth checkpoint đã training")
     parser.add_argument("--timesformer_checkpoint", type=str, 
-                        default="https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/ALPRO/alpro_pretrain.pt",
-                        help="URL hoặc đường dẫn đến file pretrained weights cho TimeSformer")
+                        default="/home/student10/.cache/torch/hub/checkpoints/alpro_msrvtt_qa.pth",
+                        help="Đường dẫn đến TimeSformer weights")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Thiết bị: {device}")
 
-    # 1. Khởi tạo mô hình với timesformer_weight_path
+    # 1. Khởi tạo mô hình với TimeSformer weights
     model = Blip2TimeSformer(
         vit_model="timesformer",
         img_size=224,
@@ -39,12 +39,40 @@ def main():
         timesformer_weight_path=args.timesformer_checkpoint,  # Load TimeSformer weights trong constructor
     )
 
-    # 2. Load checkpoint đã train
+    # 2. Load checkpoint đã training
     logger.info(f"Loading checkpoint từ {args.checkpoint}")
     try:
-        # Sử dụng phương thức load_from_pretrained
-        model.load_from_pretrained(args.checkpoint)
+        checkpoint = torch.load(args.checkpoint, map_location="cpu")
+        
+        # Kiểm tra cấu trúc checkpoint
+        if "model" in checkpoint:
+            state_dict = checkpoint["model"]
+        else:
+            state_dict = checkpoint
+            
+        # Lọc bỏ các weights của visual_encoder để tránh ghi đè lên TimeSformer đã được load
+        filtered_state_dict = {}
+        for key, value in state_dict.items():
+            if not key.startswith("visual_encoder"):
+                filtered_state_dict[key] = value
+        
+        # Load state dict đã lọc vào model
+        msg = model.load_state_dict(filtered_state_dict, strict=False)
+        logger.info(f"Missing keys: {len(msg.missing_keys)}, Unexpected keys: {len(msg.unexpected_keys)}")
+        if msg.missing_keys:
+            if len(msg.missing_keys) > 5:
+                logger.info(f"Một số missing keys: {msg.missing_keys[:5]}...")
+            else:
+                logger.info(f"Missing keys: {msg.missing_keys}")
+            
         logger.info("Đã load checkpoint thành công")
+        
+        # Kiểm tra số lượng parameters
+        visual_encoder_params = len([name for name, _ in model.named_parameters() if "visual_encoder" in name])
+        logger.info(f"Số lượng parameters của visual_encoder: {visual_encoder_params}")
+        total_params = sum(p.numel() for p in model.parameters())
+        logger.info(f"Tổng số parameters của model: {total_params}")
+        
     except Exception as e:
         logger.error(f"Lỗi khi load checkpoint: {str(e)}")
         import traceback

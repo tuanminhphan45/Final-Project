@@ -58,7 +58,7 @@ run:
     num_workers: 4
     load_gt_from_file: true
     annotation_file: "/storage/student10/vidcaption/LAVIS/cache/msrvtt_caption_gt/msrvtt_caption_test_annotations.json"
-    max_epoch: 30  # Tăng từ 20 lên 30
+    max_epoch: 10  # Tăng từ 20 lên 30
     lr_sched: "linear_warmup_cosine_lr"
     init_lr: 5e-5  # Tăng từ 1e-5 lên 5e-5
     min_lr: 1e-6  # Giảm từ 5e-6 xuống 1e-6

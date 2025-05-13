@@ -652,32 +652,45 @@ class Blip2TimeSformer(Blip2Base):
         from lavis.common.utils import is_url
         
         logger = logging.getLogger(__name__)
-        logger.info(f"Loading TimeSformer pretrained weights từ {url_or_filename} (type: {model_type})")
+        logger.info("---------------------------------------------------")
+        logger.info(f"LOADING TIMESFORMER WEIGHTS")
+        logger.info("---------------------------------------------------")
+        logger.info(f"Source: {url_or_filename}")
+        logger.info(f"Model type: {model_type}")
         
         # Load checkpoint
         if is_url(url_or_filename):
+            logger.info(f"Downloading weights từ URL...")
             cached_file = download_cached_file(
                 url_or_filename, check_hash=False, progress=True
             )
             checkpoint = torch.load(cached_file, map_location="cpu")
+            logger.info(f"✓ Đã download xong weights từ URL")
         elif os.path.isfile(url_or_filename):
+            logger.info(f"Loading weights từ file local...")
             checkpoint = torch.load(url_or_filename, map_location="cpu")
+            logger.info(f"✓ Đã load xong weights từ file local")
         else:
-            raise RuntimeError("checkpoint url or path is invalid")
-            
+            raise RuntimeError(f"✗ LỖI: Đường dẫn không hợp lệ: {url_or_filename}")
+        
         # Lấy state_dict
         if "model" in checkpoint:
             state_dict = checkpoint["model"]
+            logger.info(f"✓ Phát hiện state_dict trong key 'model'")
         elif "module" in checkpoint:  # Alpro models thường lưu với tiền tố "module"
             state_dict = checkpoint["module"]
+            logger.info(f"✓ Phát hiện state_dict trong key 'module'")
         elif "state_dict" in checkpoint:
             state_dict = checkpoint["state_dict"]
+            logger.info(f"✓ Phát hiện state_dict trong key 'state_dict'")
         else:
             state_dict = checkpoint
-            
+            logger.info(f"✓ Sử dụng checkpoint trực tiếp làm state_dict")
+        
         # Thông số cần thiết
         num_patches = (self.visual_encoder.img_size // self.visual_encoder.patch_size) ** 2
         num_frames = self.visual_encoder.num_frames
+        logger.info(f"Cấu hình TimeSformer: {num_patches} patches, {num_frames} frames")
         
         # Xử lý cấu trúc key dựa trên loại model
         visual_encoder_keys = []
@@ -803,12 +816,15 @@ class Blip2TimeSformer(Blip2Base):
             new_state_dict = latest_state_dict
         
         # Load state_dict vào mô hình
-        logger.info("Loading weights vào TimeSformer...")
+        logger.info("Đang áp dụng weights vào TimeSformer...")
         missing, unexpected = self.load_state_dict(new_state_dict, strict=False)
         
-        logger.info(f"Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
-        if missing:
-            logger.info(f"Một số missing keys: {missing[:5]}...")
+        logger.info("---------------------------------------------------")
+        logger.info(f"KẾT QUẢ LOAD TIMESFORMER WEIGHTS:")
+        logger.info(f"✓ Số tham số đã load: {len(new_state_dict)} keys")
+        logger.info(f"✓ Missing keys: {len(missing)}")
+        logger.info(f"✓ Unexpected keys: {len(unexpected)}")
+        logger.info("---------------------------------------------------")
         
         return missing, unexpected
 
