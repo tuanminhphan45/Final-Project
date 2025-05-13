@@ -852,36 +852,95 @@ class Blip2TimeSformer(Blip2Base):
         Load pretrained weights vào mô hình BLIP2 TimeSformer
         Lưu ý: Weights cho TimeSformer nên được load thông qua __init__ hoặc load_timesformer_from_pretrained()
         """
+        logger = logging.getLogger(__name__)
+        logger.info("===== LOAD PRETRAINED BLIP2 WEIGHTS =====")
+        
         # Không tự động load TimeSformer weights nữa (đã được xử lý trong __init__)
         # Chỉ truyền vào kwargs["timesformer_url"] nếu muốn ghi đè weights hiện tại
         if "timesformer_url" in kwargs and kwargs["timesformer_url"]:
+            logger.info(f"Đang load TimeSformer weights từ {kwargs['timesformer_url']}")
             self.load_timesformer_from_pretrained(kwargs["timesformer_url"])
         
         if is_url(url_or_filename):
+            logger.info(f"Đang download checkpoint từ URL: {url_or_filename}")
             cached_file = download_cached_file(
                 url_or_filename, check_hash=False, progress=True
             )
             checkpoint = torch.load(cached_file, map_location="cpu")
+            logger.info("✓ Đã tải checkpoint từ URL thành công")
         elif os.path.isfile(url_or_filename):
+            logger.info(f"Đang load checkpoint từ file: {url_or_filename}")
             checkpoint = torch.load(url_or_filename, map_location="cpu")
+            logger.info("✓ Đã tải checkpoint từ file thành công")
         else:
             raise RuntimeError("checkpoint url or path is invalid")
 
         if "model" in checkpoint:
             state_dict = checkpoint["model"]
+            logger.info("Đã tìm thấy state_dict trong key 'model'")
         else:
             state_dict = checkpoint
+            logger.info("Sử dụng checkpoint trực tiếp làm state_dict")
             
         # Lọc bỏ các weights của visual_encoder để tránh ghi đè lên TimeSformer đã được load
         filtered_state_dict = {}
+        qformer_keys = 0
+        other_keys = 0
+        
         for key, value in state_dict.items():
             if not key.startswith("visual_encoder"):
                 filtered_state_dict[key] = value
+                if key.startswith("Qformer.") or key.startswith("query_tokens"):
+                    qformer_keys += 1
+                else:
+                    other_keys += 1
+        
         state_dict = filtered_state_dict
+        logger.info(f"Đã lọc state_dict: {qformer_keys} QFormer keys, {other_keys} keys khác")
+        
+        # Kiểm tra xem có weights cho QFormer hay không
+        has_qformer_weights = any(k.startswith("Qformer.") for k in state_dict.keys())
+        if has_qformer_weights:
+            logger.info("✓ Checkpoint có chứa weights cho QFormer")
+        else:
+            logger.warning("⚠️ Checkpoint KHÔNG chứa weights cho QFormer!")
+        
+        # Kiểm tra xem có query_tokens hay không
+        has_query_tokens = any(k.startswith("query_tokens") for k in state_dict.keys())
+        if has_query_tokens:
+            logger.info("✓ Checkpoint có chứa weights cho query_tokens")
+        else:
+            logger.warning("⚠️ Checkpoint KHÔNG chứa weights cho query_tokens!")
+        
+        # Thêm thông tin về QFormer weights trước khi load
+        if hasattr(self, "Qformer") and hasattr(self.Qformer, "bert") and hasattr(self.Qformer.bert, "encoder"):
+            sample_layer = self.Qformer.bert.encoder.layer[0]
+            if hasattr(sample_layer, "attention"):
+                before_weights = sample_layer.attention.self.query.weight.mean().item()
+                logger.info(f"QFormer weights trước khi load: mean={before_weights:.4f}")
         
         msg = self.load_state_dict(state_dict, strict=False)
         
-        logging.info("Missing keys {}".format(msg.missing_keys))
-        logging.info("load checkpoint from %s" % url_or_filename)
+        # Kiểm tra QFormer weights sau khi load
+        if hasattr(self, "Qformer") and hasattr(self.Qformer, "bert") and hasattr(self.Qformer.bert, "encoder"):
+            sample_layer = self.Qformer.bert.encoder.layer[0]
+            if hasattr(sample_layer, "attention"):
+                after_weights = sample_layer.attention.self.query.weight.mean().item()
+                logger.info(f"QFormer weights sau khi load: mean={after_weights:.4f}")
+                
+                if abs(before_weights - after_weights) > 1e-4:
+                    logger.info("✓ THÀNH CÔNG: QFormer weights đã thay đổi sau khi load")
+                else:
+                    logger.warning("⚠️ QFormer weights KHÔNG thay đổi sau khi load!")
+        
+        logger.info("Missing keys {}".format(msg.missing_keys))
+        if msg.missing_keys:
+            logger.info(f"Một số missing keys: {msg.missing_keys[:5]}...")
+        
+        if msg.unexpected_keys:
+            logger.info(f"Unexpected keys: {msg.unexpected_keys[:5]}...")
+        
+        logger.info("✓ Đã load checkpoint thành công")
+        logger.info("===== KẾT THÚC LOAD PRETRAINED BLIP2 WEIGHTS =====")
         
         return msg

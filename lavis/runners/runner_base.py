@@ -682,6 +682,30 @@ class RunnerBase:
         # Lưu TimeSformer weights path nếu có trong checkpoint  
         timesformer_path = checkpoint.get("timesformer_weight_path", None)
         
+        # Kiểm tra weights của QFormer trước khi load
+        qformer_before = None
+        if hasattr(model, "Qformer") and hasattr(model.Qformer, "bert") and hasattr(model.Qformer.bert, "encoder"):
+            if len(model.Qformer.bert.encoder.layer) > 0:
+                sample_layer = model.Qformer.bert.encoder.layer[0]
+                if hasattr(sample_layer, "attention") and hasattr(sample_layer.attention.self, "query"):
+                    qformer_before = sample_layer.attention.self.query.weight.mean().item()
+                    logging.info(f"QFormer weights trước khi load: mean={qformer_before:.4f}")
+        
+        # Kiểm tra xem checkpoint có QFormer weights hay không
+        state_dict = checkpoint["model"]
+        has_qformer_weights = any(k.startswith("Qformer.") for k in state_dict.keys())
+        has_query_tokens = any(k.startswith("query_tokens") for k in state_dict.keys())
+        
+        if has_qformer_weights:
+            logging.info(f"✓ Checkpoint có chứa QFormer weights ({sum(1 for k in state_dict if k.startswith('Qformer.'))} keys)")
+        else:
+            logging.warning("⚠️ Checkpoint KHÔNG chứa QFormer weights! Có thể gây lỗi")
+        
+        if has_query_tokens:
+            logging.info("✓ Checkpoint có chứa query_tokens weights")
+        else:
+            logging.warning("⚠️ Checkpoint KHÔNG chứa query_tokens weights! Có thể gây lỗi")
+        
         try:
             model.load_state_dict(checkpoint["model"])
             logging.info("✓ THÀNH CÔNG: Đã load checkpoint QFormer cho evaluation")
@@ -694,6 +718,18 @@ class RunnerBase:
             )
             model.load_state_dict(checkpoint["model"], strict=False)
             logging.info("✓ THÀNH CÔNG: Đã load checkpoint QFormer với strict=False")
+        
+        # Kiểm tra weights của QFormer sau khi load
+        if qformer_before is not None and hasattr(model, "Qformer") and hasattr(model.Qformer, "bert"):
+            sample_layer = model.Qformer.bert.encoder.layer[0]
+            if hasattr(sample_layer, "attention") and hasattr(sample_layer.attention.self, "query"):
+                qformer_after = sample_layer.attention.self.query.weight.mean().item()
+                logging.info(f"QFormer weights sau khi load: mean={qformer_after:.4f}")
+                
+                if abs(qformer_before - qformer_after) > 1e-4:
+                    logging.info("✓ XÁC NHẬN: QFormer weights đã thay đổi sau khi load checkpoint")
+                else:
+                    logging.warning("⚠️ CẢNH BÁO: QFormer weights KHÔNG thay đổi sau khi load checkpoint!")
         
         # Nếu model là Blip2TimeSformer và có timesformer_path
         if hasattr(model, "load_timesformer_from_pretrained") and timesformer_path:

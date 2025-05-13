@@ -99,8 +99,39 @@ class BaseTask:
             else:
                 logger.warning("⚠️ TimeSformer không có weights hoặc structure không đúng!")
             
-            # Kiểm tra trạng thái Qformer weights
-            logger.info(f"✓ Qformer số query tokens: {model.query_tokens.shape[1]}")
+            # Kiểm tra chi tiết về QFormer weights
+            if hasattr(model, "query_tokens"):
+                logger.info(f"✓ Qformer số query tokens: {model.query_tokens.shape[1]}")
+                logger.info(f"✓ Qformer query_tokens stats: mean={model.query_tokens.mean().item():.4f}, std={model.query_tokens.std().item():.4f}")
+                
+                # Kiểm tra các tham số quan trọng của QFormer
+                qformer_has_weights = True
+                
+                # Kiểm tra self-attention weights
+                if hasattr(model.Qformer, "bert") and hasattr(model.Qformer.bert, "encoder"):
+                    sample_layer = model.Qformer.bert.encoder.layer[0]
+                    if hasattr(sample_layer, "attention"):
+                        attn_output = sample_layer.attention.self.query.weight
+                        logger.info(f"✓ QFormer self-attention weights: shape={attn_output.shape}, mean={attn_output.mean().item():.4f}")
+                    else:
+                        qformer_has_weights = False
+                        logger.warning("⚠️ QFormer không có attention weights!")
+                else:
+                    qformer_has_weights = False
+                    logger.warning("⚠️ QFormer cấu trúc không đúng hoặc thiếu weights!")
+                
+                # Kiểm tra cross-attention weights
+                if hasattr(model.Qformer, "bert") and hasattr(model.Qformer.bert, "encoder"):
+                    for i, layer in enumerate(model.Qformer.bert.encoder.layer):
+                        if hasattr(layer, "crossattention"):
+                            cross_attn = layer.crossattention.self.query.weight
+                            logger.info(f"✓ QFormer cross-attention layer {i}: shape={cross_attn.shape}, mean={cross_attn.mean().item():.4f}")
+                            break
+                
+                if qformer_has_weights:
+                    logger.info("✓ QFormer đã có weights cần thiết để evaluate")
+                else:
+                    logger.warning("⚠️ QFormer có thể CHƯA load weights đúng cách!")
             
         model.before_evaluation(dataset=dataset, task_type=type(self))
 
