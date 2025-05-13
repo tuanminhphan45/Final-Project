@@ -502,6 +502,17 @@ class RunnerBase:
         has_timesformer = hasattr(model, "visual_encoder") and hasattr(model.visual_encoder, "forward_features")
         if has_timesformer:
             logging.info("✓ Phát hiện: Mô hình có sử dụng TimeSformer")
+            
+            # Kiểm tra trạng thái của TimeSformer weights
+            if hasattr(model, "visual_encoder") and hasattr(model.visual_encoder, "model"):
+                if hasattr(model.visual_encoder.model, "pos_embed") and model.visual_encoder.model.pos_embed is not None:
+                    logging.info(f"✓ TimeSformer đã có weights: pos_embed shape = {model.visual_encoder.model.pos_embed.shape}")
+                    if hasattr(model.visual_encoder.model, "time_embed") and model.visual_encoder.model.time_embed is not None:
+                        logging.info(f"✓ TimeSformer đã có temporal weights: time_embed shape = {model.visual_encoder.model.time_embed.shape}")
+                    else:
+                        logging.warning("⚠️ TimeSformer không có time_embed weights!")
+                else:
+                    logging.warning("⚠️ TimeSformer không có pos_embed weights!")
         
         # Check if we need to reload best model
         if not skip_reload and cur_epoch == "best":

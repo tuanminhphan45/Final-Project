@@ -74,10 +74,86 @@ class BaseTask:
         model.before_training(dataset=dataset, task_type=type(self))
 
     def before_evaluation(self, model, dataset, **kwargs):
+        """
+        Thực hiện các công việc cần thiết trước khi đánh giá
+        Ví dụ: Đặt model vào chế độ đúng đắn, kiểm tra weights, etc.
+        """
+        logger = logging.getLogger(__name__)
+        
+        logger.info("=== CHUẨN BỊ MODEL TRƯỚC KHI ĐÁNH GIÁ ===")
+        
+        # Kiểm tra model là Blip2TimeSformer hay không
+        if hasattr(model, "visual_encoder") and hasattr(model, "Qformer"):
+            logger.info("✓ Model là Blip2 với TimeSformer")
+            
+            # Kiểm tra trạng thái TimeSformer weights
+            if hasattr(model.visual_encoder, "model") and hasattr(model.visual_encoder.model, "pos_embed"):
+                pos_embed_shape = model.visual_encoder.model.pos_embed.shape
+                logger.info(f"✓ TimeSformer có weights: pos_embed shape = {pos_embed_shape}")
+                
+                if hasattr(model.visual_encoder.model, "time_embed"):
+                    time_embed_shape = model.visual_encoder.model.time_embed.shape
+                    logger.info(f"✓ TimeSformer có temporal weights: time_embed shape = {time_embed_shape}")
+                else:
+                    logger.warning("⚠️ TimeSformer không có time_embed weights!")
+            else:
+                logger.warning("⚠️ TimeSformer không có weights hoặc structure không đúng!")
+            
+            # Kiểm tra trạng thái Qformer weights
+            logger.info(f"✓ Qformer số query tokens: {model.query_tokens.shape[1]}")
+            
         model.before_evaluation(dataset=dataset, task_type=type(self))
 
     def after_evaluation(self, **kwargs):
-        pass
+        """
+        Xử lý sau khi đánh giá và lưu kết quả caption nếu có
+        """
+        val_result = kwargs.get("val_result", [])
+        split_name = kwargs.get("split_name", "val")
+        epoch = kwargs.get("epoch", 0)
+        
+        logger = logging.getLogger(__name__)
+        logger.info(f"=== KẾT QUẢ ĐÁNH GIÁ TRÊN TẬP {split_name.upper()} (EPOCH {epoch}) ===")
+        
+        # Kiểm tra xem trong kết quả có caption không
+        has_captions = False
+        if val_result and isinstance(val_result, list):
+            for item in val_result:
+                if isinstance(item, dict) and "caption" in item:
+                    has_captions = True
+                    break
+        
+        # Nếu có caption, lưu vào file
+        if has_captions:
+            # Lấy result_dir từ registry hoặc sử dụng thư mục hiện tại
+            try:
+                from lavis.common.registry import registry
+                result_dir = registry.get_path("result_dir")
+            except:
+                result_dir = "results"
+                os.makedirs(result_dir, exist_ok=True)
+            
+            # Tạo tên file với thông tin về split và epoch
+            filename = f"caption_results_{split_name}_{epoch}"
+            
+            # Lưu kết quả
+            result_file = self.save_result(val_result, result_dir, filename, remove_duplicate="image_id")
+            
+            # Hiển thị một số caption để xem nhanh
+            logger.info(f"✓ Đã lưu {len(val_result)} caption vào file: {result_file}")
+            logger.info("=== MẪU KẾT QUẢ CAPTION ===")
+            
+            # Hiển thị 5 mẫu caption đầu tiên
+            sample_count = min(5, len(val_result))
+            for i in range(sample_count):
+                if "image_id" in val_result[i] and "caption" in val_result[i]:
+                    logger.info(f"Video {val_result[i]['image_id']}: {val_result[i]['caption']}")
+        
+        # Nếu có agg_metrics, trả về như cũ
+        if "agg_metrics" in kwargs:
+            return {"agg_metrics": kwargs["agg_metrics"], "best_epoch": kwargs.get("best_epoch", 0)}
+        
+        return None
 
     def inference_step(self):
         raise NotImplementedError

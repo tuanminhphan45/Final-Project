@@ -55,9 +55,14 @@ class Blip2TimeSformer(Blip2Base):
         
         # Store the num_frames as an attribute
         self.num_frames = num_frames
+        
+        logger = logging.getLogger(__name__)
+        logger.info("====== KHỞI TẠO BLIP2TIMESFORMER MODEL ======")
+        logger.info(f"Tham số: img_size={img_size}, num_frames={num_frames}, num_query_token={num_query_token}")
 
         # Tự động load weight cho TimeSformer nếu có đường dẫn
         if timesformer_weight_path:
+            logger.info(f"Đang load TimeSformer weights từ đường dẫn được chỉ định: {timesformer_weight_path}")
             self.load_timesformer_from_pretrained(
                 timesformer_weight_path, 
                 model_type=timesformer_model_type
@@ -71,14 +76,26 @@ class Blip2TimeSformer(Blip2Base):
                 "alpro_pretrain.pt"
             )
             if os.path.exists(default_timesformer_weight):
+                logger.info(f"Không tìm thấy đường dẫn TimeSformer weights, thử load từ đường dẫn mặc định: {default_timesformer_weight}")
                 self.load_timesformer_from_pretrained(default_timesformer_weight)
                 logging.info(f"Loaded default TimeSformer weights from {default_timesformer_weight}")
+            else:
+                logger.warning(f"⚠️ CẢNH BÁO: Không tìm thấy TimeSformer weights, model sẽ khởi tạo với weights ngẫu nhiên!")
+
+        # Kiểm tra xem TimeSformer đã có weights hay chưa
+        if hasattr(self.visual_encoder, "model") and hasattr(self.visual_encoder.model, "pos_embed"):
+            logger.info(f"✓ TimeSformer đã có weights: pos_embed shape = {self.visual_encoder.model.pos_embed.shape}")
+            if hasattr(self.visual_encoder.model, "time_embed"):
+                logger.info(f"✓ TimeSformer đã có temporal weights: time_embed shape = {self.visual_encoder.model.time_embed.shape}")
+        else:
+            logger.warning("⚠️ TimeSformer weights không được load đúng cách! Kiểm tra lại đường dẫn weights.")
 
         if freeze_vit:
             for name, param in self.visual_encoder.named_parameters():
                 param.requires_grad = False
             self.visual_encoder = self.visual_encoder.eval()
             self.visual_encoder.train = disabled_train
+            logger.info("✓ Đã đóng băng (freeze) TimeSformer encoder")
         
 
         # Initialize Q-Former with correct embed_dim
@@ -105,6 +122,8 @@ class Blip2TimeSformer(Blip2Base):
         self.temp = nn.Parameter(0.07 * torch.ones([]))
         
         self.max_txt_len = max_txt_len
+        logger.info("====== KHỞI TẠO BLIP2TIMESFORMER MODEL HOÀN TẤT ======")
+
     def init_vision_encoder(
         self,
         vit_model="timesformer",
