@@ -373,9 +373,9 @@ class Blip2TimeSformer(Blip2Base):
     def generate(
         self,
         samples,
-        use_nucleus_sampling: bool = False,
+        use_nucleus_sampling: bool = True,
         num_beams: int = 3,
-        max_length: int = 30,
+        max_length: int = 50,
         min_length: int = 10,
         top_p: float = 0.9,
         repetition_penalty: float = 1.0,
