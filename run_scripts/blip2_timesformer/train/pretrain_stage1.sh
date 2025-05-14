@@ -1,5 +1,5 @@
 #!/bin/bash
-export MASTER_PORT=55555  
+export MASTER_PORT=55556  
 export MASTER_ADDR=localhost
 export CUDA_VISIBLE_DEVICES=1,2,3
 
