@@ -33,7 +33,7 @@ class Blip2TimeSformer(Blip2Base):
         img_size=224,
         num_frames=16,
         drop_path_rate=0.1,
-        use_grad_checkpointing=False,
+        use_grad_checkpointing=True,
         vit_precision="fp16",
         freeze_vit=False,
         num_query_token=32,
@@ -577,13 +577,12 @@ class Blip2TimeSformer(Blip2Base):
         drop_path_rate = cfg.get("drop_path_rate", 0.1)
         use_grad_checkpointing = cfg.get("use_grad_checkpointing", False)
         vit_precision = "fp16"
-        freeze_vit = cfg.get("freeze_vit", True)
+        freeze_vit = cfg.get("freeze_vit", False)
         num_query_token = cfg.get("num_query_token", 128)
         cross_attention_freq = cfg.get("cross_attention_freq", 2)
         embed_dim = cfg.get("embed_dim", 768)
         max_txt_len = cfg.get("max_txt_len", 32)
-        
-
+    
         model = cls(
             vit_model=vit_model,
             img_size=img_size,
