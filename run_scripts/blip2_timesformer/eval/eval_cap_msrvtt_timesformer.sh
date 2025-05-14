@@ -1,7 +1,7 @@
 #!/bin/bash
 export MASTER_PORT=55555
 export MASTER_ADDR=localhost
-export CUDA_VISIBLE_DEVICES=0,1,2,3
+export CUDA_VISIBLE_DEVICES=1,2,3
 
 export LAVIS_CACHE_ROOT="/storage/student10/vidcaption/LAVIS/cache"
 cd /storage/student10/vidcaption/LAVIS
@@ -96,7 +96,7 @@ python test_weights_loading.py
 # Chạy script evaluate như bình thường
 echo "Tiếp tục với quá trình evaluate..."
 python -m torch.distributed.run \
-    --nproc_per_node=4 \
+    --nproc_per_node=3 \
     --master_port=${MASTER_PORT} \
     evaluate.py \
     --cfg-path lavis/projects/blip2_timesformer/eval/caption_coco_timesformer_eval.yaml 
