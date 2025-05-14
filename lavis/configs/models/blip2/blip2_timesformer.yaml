@@ -1,7 +1,6 @@
 model:
   arch: blip2_timesformer
   
-  # Vision encoder (TimeSformer) settings
   vit_model: timesformer
   image_size: 224
   num_frames: 16
@@ -24,18 +23,17 @@ model:
   
   # TimeSformer-specific checkpoint (optional)
   # ALPRO provides a pretrained TimeSformer model for video processing
-  timesformer_pretrained: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/ALPRO/alpro_msrvtt_qa.pth"
+  #timesformer_pretrained: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/ALPRO/alpro_msrvtt_qa.pth"
   
   # TimeSformer configuration (following ALPRO settings)
   timesformer:
-    n_frms: 16  # Reduced from ALPRO's 16 to match our setting
+    n_frms: 16  
     image_size: 224
     patch_size: 14
     attn_drop_rate: 0.1
     drop_rate: 0.1
     num_frames: 16
     drop_path_rate: 0.1
- # Changed from ALPRO's True for simplicity during testing
 
 preprocess:
   vis_processor:
