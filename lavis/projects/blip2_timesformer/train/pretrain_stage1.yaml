@@ -42,7 +42,7 @@ model:
     drop_path_rate: 0
     use_grad_checkpoint: True
     vit_precision: "fp16"
-    freeze_vit: Flase
+    freeze_vit: False
     num_query_token: 128  
     cross_attention_freq: 2  
 
