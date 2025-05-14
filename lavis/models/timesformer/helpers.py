@@ -315,39 +315,78 @@ def load_pretrained_kinetics(
         len(pretrained_model) > 0
     ), "Path to pre-trained Kinetics weights not provided."
 
-    state_dict = load_state_dict(pretrained_model)
-
-    classifier_name = cfg["classifier"]
-    if ignore_classifier:
-
-        classifier_weight_key = classifier_name + ".weight"
-        classifier_bias_key = classifier_name + ".bias"
-
-        state_dict[classifier_weight_key] = model.state_dict()[classifier_weight_key]
-        state_dict[classifier_bias_key] = model.state_dict()[classifier_bias_key]
-
-    else:
-        raise NotImplementedError(
-            "[dxli] Not supporting loading Kinetics-pretrained ckpt with classifier."
-        )
-
-    ## Resizing the positional embeddings in case they don't match
-    if num_patches + 1 != state_dict["pos_embed"].size(1):
-        new_pos_embed = resize_spatial_embedding(state_dict, "pos_embed", num_patches)
-        state_dict["pos_embed"] = new_pos_embed
-
-    ## Resizing time embeddings in case they don't match
-    if "time_embed" in state_dict and num_frames != state_dict["time_embed"].size(1):
-        state_dict["time_embed"] = resize_temporal_embedding(
-            state_dict, "time_embed", num_frames
-        )
-
-    ## Loading the weights
     try:
-        model.load_state_dict(state_dict, strict=True)
+        # Thử tải state_dict từ file
+        state_dict = load_state_dict(pretrained_model)
+        
+        # Kiểm tra định dạng của state_dict
+        if "model" in state_dict:
+            logging.info("Loading weights from 'model' key in checkpoint")
+            state_dict = state_dict["model"]
+        elif "module" in state_dict:
+            logging.info("Loading weights from 'module' key in checkpoint")
+            state_dict = state_dict["module"]
+        elif "state_dict" in state_dict:
+            logging.info("Loading weights from 'state_dict' key in checkpoint")
+            state_dict = state_dict["state_dict"]
+        
+        # Xử lý các prefix của key
+        processed_state_dict = {}
+        for k, v in state_dict.items():
+            if k.startswith("visual."):
+                # ALPRO format
+                new_k = k[len("visual."):]
+                processed_state_dict[new_k] = v
+            elif k.startswith("visual_encoder."):
+                # BLIP2 TimeSformer format
+                new_k = k[len("visual_encoder."):]
+                processed_state_dict[new_k] = v
+            else:
+                # Direct key format
+                processed_state_dict[k] = v
+                
+        state_dict = processed_state_dict
+
+        classifier_name = cfg["classifier"]
+        if ignore_classifier and classifier_name + ".weight" in model.state_dict():
+            classifier_weight_key = classifier_name + ".weight"
+            classifier_bias_key = classifier_name + ".bias"
+
+            if classifier_weight_key in model.state_dict():
+                state_dict[classifier_weight_key] = model.state_dict()[classifier_weight_key]
+            if classifier_bias_key in model.state_dict():
+                state_dict[classifier_bias_key] = model.state_dict()[classifier_bias_key]
+
+        ## Resizing the positional embeddings in case they don't match
+        pos_embed_key = "pos_embed"
+        if pos_embed_key in state_dict and num_patches + 1 != state_dict[pos_embed_key].size(1):
+            new_pos_embed = resize_spatial_embedding(state_dict, pos_embed_key, num_patches)
+            state_dict[pos_embed_key] = new_pos_embed
+
+        ## Resizing time embeddings in case they don't match
+        time_embed_key = "time_embed" 
+        if time_embed_key in state_dict and num_frames != state_dict[time_embed_key].size(1):
+            state_dict[time_embed_key] = resize_temporal_embedding(
+                state_dict, time_embed_key, num_frames
+            )
+
+        ## Loading the weights
+        missing, unexpected = model.load_state_dict(state_dict, strict=False)
+        
+        if len(missing) > 0:
+            logging.info("Keys in model but not in loaded:")
+            logging.info(f"In total {len(missing)}, {sorted(missing)}")
+            
+        if len(unexpected) > 0:
+            logging.info("Keys in loaded but not in model:")
+            logging.info(f"In total {len(unexpected)}, {sorted(unexpected)}")
+            
         logging.info("Succeeded in loading Kinetics pre-trained weights.")
-    except:
-        logging.error("Error in loading Kinetics pre-trained weights.")
+        
+    except Exception as e:
+        logging.error(f"Error in loading Kinetics pre-trained weights: {str(e)}")
+        import traceback
+        logging.error(traceback.format_exc())
 
 
 def resize_spatial_embedding(state_dict, key, num_patches):

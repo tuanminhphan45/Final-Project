@@ -43,15 +43,21 @@ def create_timesformer(img_size, num_frames, drop_path_rate, use_grad_checkpoint
         remove_classifier=True,
     )
     
-    # Mặc định load weights từ Kinetics pretrained
+    # Load weights từ Kinetics pretrained
     logging.info("Đang load TimeSformer weights từ Kinetics pretrained")
     try:
-    
-        visual_encoder.load_state_dict("vit_base_patch16_224")
+        # Đường dẫn đến pretrained Kinetics weights
+        pretrained_path = "/storage/student10/vidcaption/LAVIS/TimeSformer_divST_8x32_224_K400.pyth"
         
-        logging.info("✓ Đã load TimeSformer weights thành công")
+        # Gọi phương thức load_checkpoint của TimeSformer
+        success = visual_encoder.load_checkpoint(pretrained_path)
+        
+        if success:
+            logging.info("✓ Đã load TimeSformer weights từ Kinetics thành công")
+        else:
+            logging.warning("⚠️ Lỗi khi load TimeSformer weights")
     except Exception as e:
-        logging.warning(f"⚠️ Không thể load TimeSformer weights: {str(e)}")
+        logging.warning(f"⚠️ Không thể load TimeSformer weights từ Kinetics: {str(e)}")
         logging.warning("Model sẽ được khởi tạo với trọng số ngẫu nhiên")
     
     return visual_encoder

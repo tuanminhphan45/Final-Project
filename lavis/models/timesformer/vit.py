@@ -633,7 +633,7 @@ class TimeSformer(nn.Module):
             attention_type=self.attention_type,
             pretrained_model=pretrained_ckpt_path,
         )
-        
+    
     def load_checkpoint(self, checkpoint_path):
         """
         Load weights directly from a local checkpoint file
@@ -666,21 +666,17 @@ class TimeSformer(nn.Module):
             # Xử lý các prefix của key
             processed_state_dict = {}
             for k, v in state_dict.items():
-                if k.startswith("visual.model."):
+                if k.startswith("visual."):
                     # ALPRO format
-                    new_k = "model." + k[len("visual.model."):]
+                    new_k = k[len("visual."):]
                     processed_state_dict[new_k] = v
-                elif k.startswith("visual_encoder.model."):
+                elif k.startswith("visual_encoder."):
                     # BLIP2 TimeSformer format
-                    new_k = "model." + k[len("visual_encoder.model."):]
+                    new_k = k[len("visual_encoder."):]
                     processed_state_dict[new_k] = v
-                elif k.startswith("model."):
-                    # Already has model prefix
-                    processed_state_dict[k] = v
                 else:
                     # Direct key format
-                    new_k = "model." + k
-                    processed_state_dict[new_k] = v
+                    processed_state_dict[k] = v
                     
             # Xử lý spatial embedding nếu cần
             pos_embed_key = "model.pos_embed"
