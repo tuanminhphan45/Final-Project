@@ -33,19 +33,18 @@ model:
     timesformer:
         image_size: 224
         patch_size: 16
-        num_frames: 16  # Tăng từ 4 lên 16
-        attn_drop_rate: 0.1  # Thêm attn_drop_rate
+        num_frames: 8  
+        attn_drop_rate: 0.1  
         drop_rate: 0.1
         drop_path_rate: 0.1
-        n_frms: 16  # Tăng từ 4 lên 16
 
     image_size: 224
     drop_path_rate: 0
     use_grad_checkpoint: True
     vit_precision: "fp16"
-    freeze_vit: True
-    num_query_token: 128  # Giảm từ 256 xuống 128
-    cross_attention_freq: 2  # Thêm cross_attention_freq
+    freeze_vit: Flase
+    num_query_token: 128  
+    cross_attention_freq: 2  
 
     # Pretrained paths
     #pretrained_qformer_path: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained.pth"
@@ -58,24 +57,24 @@ run:
     num_workers: 4
     load_gt_from_file: true
     annotation_file: "/storage/student10/vidcaption/LAVIS/cache/msrvtt_caption_gt/msrvtt_caption_test_annotations.json"
-    max_epoch: 10  # Tăng từ 20 lên 30
+    max_epoch: 10  
     lr_sched: "linear_warmup_cosine_lr"
-    init_lr: 5e-5  # Tăng từ 1e-5 lên 5e-5
-    min_lr: 1e-6  # Giảm từ 5e-6 xuống 1e-6
+    init_lr: 5e-5  
+    min_lr: 1e-6  
 
     seed: 42
     output_dir: "output/BLIP2_TimeSformer/pretrain_stage1"
 
     optimizer:
         name: adamw
-        lr: 5e-5  # Giữ nguyên
-        weight_decay: 0.01  # Giảm từ 0.05 xuống 0.01
+        lr: 5e-5  
+        weight_decay: 0.01  
         beta1: 0.9
         beta2: 0.999
 
     scheduler:
         name: cosine
-        num_warmup_steps: 1000  # Giảm từ 2500 xuống 1000
+        num_warmup_steps: 1000  
 
     amp: True
     resume_ckpt_path: null
@@ -89,4 +88,4 @@ run:
     dist_url: "env://"
     distributed: True
 
-    warmup_steps: 1000  # Giảm từ 5000 xuống 1000
+    warmup_steps: 1000  

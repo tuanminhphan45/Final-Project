@@ -175,7 +175,9 @@ class Blip2Base(BaseModel):
         ]
 
         # Thêm các tham số của visual encoder với learning rate scales khác nhau
-        if not self.cfg.get("freeze_vit", False):
+        # Thay vì kiểm tra self.cfg.get("freeze_vit"), kiểm tra freeze_vit attribute trực tiếp
+        freeze_vit = getattr(self, "freeze_vit", False)
+        if not freeze_vit:
             optimizer_config.extend([
                 {
                     "params": [
