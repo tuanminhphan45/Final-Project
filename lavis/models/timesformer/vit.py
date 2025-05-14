@@ -703,15 +703,12 @@ class TimeSformer(nn.Module):
                 
             if time_embed_key and self.num_frames != processed_state_dict[time_embed_key].size(1):
                 original_frames = processed_state_dict[time_embed_key].size(1)
-                logging.info(f"Đang resize time_embed từ {original_frames} frames sang {self.num_frames} frames")
-                
-                time_embed = processed_state_dict[time_embed_key].transpose(1, 2)
-                new_time_embed = F.interpolate(time_embed, size=(self.num_frames), mode="nearest")
-                processed_state_dict[time_embed_key] = new_time_embed.transpose(1, 2)
-                
-                # Kiểm tra kích thước sau khi resize
-                new_shape = processed_state_dict[time_embed_key].shape
-                logging.info(f"Kích thước time_embed sau khi resize: {new_shape}")
+                logging.warning(f"⚠️ Khác số frames: Checkpoint có {original_frames} frames, model cấu hình {self.num_frames} frames")
+                logging.warning(f"⚠️ Đề xuất: Điều chỉnh cấu hình model để sử dụng {original_frames} frames thay vì resize embeddings")
+                logging.warning(f"⚠️ Sẽ tiếp tục load các weights khác nhưng bỏ qua time_embed")
+                # Xóa time_embed để không gây lỗi khi load_state_dict
+                if time_embed_key in processed_state_dict:
+                    del processed_state_dict[time_embed_key]
             
             # Xử lý spatial embedding nếu cần
             pos_embed_key_1 = "model.pos_embed"

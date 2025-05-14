@@ -15,11 +15,11 @@ datasets:
             train:
                 name: "alpro_video_train"
                 image_size: 224
-                n_frms: 16  # Tăng từ 8 lên 16
+                n_frms: 8  # Giảm từ 16 xuống 8 frames
             eval:
                 name: "alpro_video_eval"
                 image_size: 224
-                n_frms: 16  # Tăng từ 8 lên 16
+                n_frms: 8  # Giảm từ 16 xuống 8 frames
         text_processor:
             train:
                 name: "blip_caption"
@@ -40,7 +40,7 @@ model:
 
     image_size: 224
     drop_path_rate: 0
-    use_grad_checkpoint: True
+    use_grad_checkpointing: False
     vit_precision: "fp16"
     freeze_vit: True
     num_query_token: 128  
@@ -75,9 +75,10 @@ run:
     amp: True
     resume_ckpt_path: null
 
-    evaluate: False
+    evaluate: True
     train_splits: ["train"]
-    valid_splits: ["test"]
+    valid_splits: ["val"]
+    test_splits: ["test"]
 
     device: "cuda"
     world_size: 3
