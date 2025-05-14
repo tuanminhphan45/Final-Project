@@ -5,9 +5,9 @@ model:
   image_size: 224
   num_frames: 16
   drop_path_rate: 0.1
-  use_grad_checkpointing: False
+  use_grad_checkpointing: True
   vit_precision: fp16
-  freeze_vit: False
+  freeze_vit: True
   
   # Q-Former settings
   num_query_token: 128
