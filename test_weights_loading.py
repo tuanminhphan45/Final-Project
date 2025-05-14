@@ -1,21 +1,10 @@
-#!/bin/bash
-export MASTER_PORT=55555
-export MASTER_ADDR=localhost
-export CUDA_VISIBLE_DEVICES=1,2,3
-
-export LAVIS_CACHE_ROOT="/storage/student10/vidcaption/LAVIS/cache"
-cd /storage/student10/vidcaption/LAVIS
-export PYTHONPATH=/storage/student10/vidcaption/LAVIS:$PYTHONPATH
-
-# Tạo file test để kiểm tra việc load weights
-cat > test_weights_loading.py << 'EOF'
 import os
 import sys
 import torch
 import yaml
 import logging
-from lavis.models import load_model_and_preprocess
 from omegaconf import OmegaConf
+from lavis.models.blip2_models.blip2_timesformer import Blip2TimeSformer
 
 # Thiết lập logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -40,19 +29,14 @@ def check_weights_loading():
     logger.info(f"Config - QFormer pretrained: {qformer_pretrained}")
     logger.info(f"Config - Checkpoint đánh giá: {eval_ckpt_path}")
     
-    # Thêm tham số qformer_pretrained nếu chưa có
-    if "qformer_pretrained" not in config["model"] and eval_ckpt_path != "không có":
-        logger.info(f"Thêm tham số qformer_pretrained = {eval_ckpt_path}")
-        config["model"]["qformer_pretrained"] = eval_ckpt_path
-    
     # Load model
     logger.info("Đang load model...")
     try:
+        # Chuyển config sang OmegaConf
         model_config = OmegaConf.create(config["model"])
-        model_cls = "blip2_timesformer"
-        model, vis_processors, txt_processors = load_model_and_preprocess(
-            model_cls, model_config
-        )
+        
+        # Load model trực tiếp từ config
+        model = Blip2TimeSformer.from_config(model_config)
         logger.info("✓ Load model thành công")
         
         # Kiểm tra TimeSformer weights
@@ -86,17 +70,4 @@ def check_weights_loading():
     logger.info("===== KẾT THÚC KIỂM TRA =====")
 
 if __name__ == "__main__":
-    check_weights_loading()
-EOF
-
-# Chạy script kiểm tra
-echo "Đang chạy script kiểm tra load weights..."
-python test_weights_loading.py
-
-# Chạy script evaluate như bình thường
-echo "Tiếp tục với quá trình evaluate..."
-python -m torch.distributed.run \
-    --nproc_per_node=3 \
-    --master_port=${MASTER_PORT} \
-    evaluate.py \
-    --cfg-path lavis/projects/blip2_timesformer/eval/caption_coco_timesformer_eval.yaml 
+    check_weights_loading() 

@@ -23,7 +23,36 @@ from lavis.models.base_model import BaseModel
 from lavis.models.blip2_models.Qformer import BertConfig, BertLMHeadModel
 from lavis.models.eva_vit import create_eva_vit_g
 from lavis.models.clip_vit import create_clip_vit_L
+from lavis.models.timesformer.vit import TimeSformer
 from transformers import BertTokenizer
+
+
+def create_timesformer(img_size, num_frames, drop_path_rate, use_grad_checkpoint, precision=None):
+    """
+    Create TimeSformer model for video processing
+    """
+    visual_encoder = TimeSformer(
+        image_size=img_size,
+        patch_size=16,
+        n_frms=num_frames,
+        attn_drop_rate=0.0,
+        drop_path_rate=drop_path_rate,
+        drop_rate=0,
+        use_grad_ckpt=use_grad_checkpoint,
+        ckpt_layer=0,
+        remove_classifier=True,
+    )
+    
+    # Mặc định load weights từ ImageNet pretrained
+    logging.info("Đang load TimeSformer weights từ ImageNet pretrained")
+    try:
+        visual_encoder.load_state_dict("vit_base_patch16_224")
+        logging.info("✓ Đã load TimeSformer weights từ ImageNet thành công")
+    except Exception as e:
+        logging.warning(f"⚠️ Không thể load TimeSformer weights từ ImageNet: {str(e)}")
+        logging.warning("Model sẽ được khởi tạo với trọng số ngẫu nhiên")
+    
+    return visual_encoder
 
 
 class Blip2Base(BaseModel):
@@ -61,13 +90,15 @@ class Blip2Base(BaseModel):
         return Qformer, query_tokens
 
     def init_vision_encoder(
-        self, model_name, img_size, drop_path_rate, use_grad_checkpoint, precision
+        self, model_name, img_size, drop_path_rate, use_grad_checkpoint, precision, num_frames=None
     ):
         assert model_name in [
             "eva_clip_g",
             "eva2_clip_L",
             "clip_L",
-        ], "vit model must be eva_clip_g, eva2_clip_L or clip_L"
+            "timesformer",
+        ], "vit model must be eva_clip_g, eva2_clip_L, clip_L, or timesformer"
+        
         if model_name == "eva_clip_g":
             visual_encoder = create_eva_vit_g(
                 img_size, drop_path_rate, use_grad_checkpoint, precision
@@ -78,7 +109,19 @@ class Blip2Base(BaseModel):
 #             )
         elif model_name == "clip_L":
             visual_encoder = create_clip_vit_L(img_size, use_grad_checkpoint, precision)
-        ln_vision = LayerNorm(visual_encoder.num_features)
+        elif model_name == "timesformer":
+            assert num_frames is not None, "num_frames must be provided for timesformer"
+            visual_encoder = create_timesformer(
+                img_size, num_frames, drop_path_rate, use_grad_checkpoint, precision
+            )
+            
+        # Xác định số chiều đầu ra của visual encoder
+        if model_name == "timesformer":
+            embed_dim = visual_encoder.model.embed_dim
+        else:
+            embed_dim = visual_encoder.num_features
+            
+        ln_vision = LayerNorm(embed_dim)
         self.vit_name = model_name
         return visual_encoder, ln_vision
 
@@ -102,49 +145,55 @@ class Blip2Base(BaseModel):
 
         return msg
 
-def get_optimizer_params(self, weight_decay, lr_scale=1):
-    if self.visual_encoder is None:
-        return []
+    def get_optimizer_params(self, weight_decay, lr_scale=1):
+        if self.visual_encoder is None:
+            return []
 
-    # Xử lý đặc biệt cho TimeSformer
-    if hasattr(self.visual_encoder, 'model'):
-        # TimeSformer stores layers in model.blocks
-        vit_num_layers = len(self.visual_encoder.model.blocks)
-    else:
-        # Fallback cho các encoder khác
-        vit_num_layers = self.visual_encoder.get_num_layer() 
+        # Xử lý đặc biệt cho TimeSformer
+        if hasattr(self.visual_encoder, 'model'):
+            # TimeSformer stores layers in model.blocks
+            vit_num_layers = len(self.visual_encoder.model.blocks)
+        else:
+            # Fallback cho các encoder khác
+            vit_num_layers = self.visual_encoder.get_num_layer() 
 
-    optimizer_config = [
-        {
-            "params": [
-                p
-                for n, p in self.named_parameters()
-                if (
-                    "visual_encoder" not in n
-                    and "prompt_learner" not in n
-                    and p.requires_grad
-                )
-            ],
-            "weight_decay": weight_decay,
-            "lr_scale": lr_scale,
-        },
-    ]
-
-    # Thêm các tham số của visual encoder với learning rate scales khác nhau
-    if not self.cfg.get("freeze_vit", False):
-        optimizer_config.extend([
+        optimizer_config = [
             {
                 "params": [
                     p
-                    for n, p in self.visual_encoder.named_parameters()
-                    if "blocks" in n and p.requires_grad
+                    for n, p in self.named_parameters()
+                    if (
+                        "visual_encoder" not in n
+                        and "prompt_learner" not in n
+                        and p.requires_grad
+                    )
                 ],
                 "weight_decay": weight_decay,
-                "lr_scale": lr_scale * 0.1,  # Giảm learning rate cho visual encoder
+                "lr_scale": lr_scale,
             },
-        ])
+        ]
 
-    return optimizer_config
+        # Thêm các tham số của visual encoder với learning rate scales khác nhau
+        if not self.cfg.get("freeze_vit", False):
+            optimizer_config.extend([
+                {
+                    "params": [
+                        p
+                        for n, p in self.visual_encoder.named_parameters()
+                        if "blocks" in n and p.requires_grad
+                    ],
+                    "weight_decay": weight_decay,
+                    "lr_scale": lr_scale * 0.1,  # Giảm learning rate cho visual encoder
+                },
+            ])
+
+        return optimizer_config
+
+    def disabled_train(self, mode=True):
+        """Overwrite model.train with this function to make sure train/eval mode
+        does not change anymore."""
+        return self
+
     def _lemmatize(self, answers):
         def apply(answer):
             doc = self.lemmatizer(answer)
@@ -181,11 +230,6 @@ def get_optimizer_params(self, weight_decay, lr_scale=1):
                 exit(1)
 
         return self._lemmatizer
-
-def disabled_train(self, mode=True):
-    """Overwrite model.train with this function to make sure train/eval mode
-    does not change anymore."""
-    return self
 
 
 class LayerNorm(nn.LayerNorm):
