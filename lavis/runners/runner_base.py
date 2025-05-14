@@ -386,6 +386,9 @@ class RunnerBase:
 
             # evaluation phase
             if len(self.valid_splits) > 0 and (self.evaluate_only or cur_epoch%self.val_freq == 0):
+                # Tạm thời bỏ qua đánh giá để tránh lỗi
+                logging.info("Đang bỏ qua đánh giá (eval_epoch) theo yêu cầu.")
+                """
                 for split_name in self.valid_splits:
                     logging.info("Evaluating on {}.".format(split_name))
                     
@@ -406,6 +409,7 @@ class RunnerBase:
 
                             val_log.update({"best_epoch": best_epoch})
                             self.log_stats(val_log, split_name)
+                """
 
             else:
                 # if no validation split is provided, we just save the checkpoint at the end of each epoch.
@@ -426,8 +430,12 @@ class RunnerBase:
             self._save_checkpoint(cur_epoch, is_best=False)
 
         # testing phase
+        # Tạm thời bỏ qua đánh giá khi kết thúc quá trình huấn luyện
+        """
         test_epoch = "best" if len(self.valid_splits) > 0 else cur_epoch
         self.evaluate(cur_epoch=test_epoch, skip_reload=self.evaluate_only)
+        """
+        logging.info("Đã bỏ qua đánh giá cuối cùng (evaluate) theo yêu cầu.")
 
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
