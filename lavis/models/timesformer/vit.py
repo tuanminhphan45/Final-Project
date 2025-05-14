@@ -666,6 +666,10 @@ class TimeSformer(nn.Module):
                 state_dict = checkpoint
                 logging.info("Using checkpoint directly as state_dict")
             
+            # Đếm tổng số tham số trong checkpoint
+            total_params_in_checkpoint = sum(p.numel() for p in [v for k, v in state_dict.items()])
+            logging.info(f"Tổng số tham số trong checkpoint: {total_params_in_checkpoint:,}")
+            
             # Xử lý các prefix của key
             processed_state_dict = {}
             for k, v in state_dict.items():
@@ -684,9 +688,6 @@ class TimeSformer(nn.Module):
                 else:
                     # Direct key format - add model. prefix for TimeSformer
                     processed_state_dict["model." + k] = v
-            
-            # Debug: Hiển thị một số keys đầu tiên để kiểm tra
-            logging.info(f"Sample keys after processing: {list(processed_state_dict.keys())[:5]}")
             
             # Xử lý mismatch giữa số frames
             # Kiểm tra cả hai định dạng key có thể có
@@ -740,6 +741,14 @@ class TimeSformer(nn.Module):
                     # Kiểm tra kích thước sau khi resize
                     logging.info(f"Kích thước pos_embed sau khi resize: {processed_state_dict[pos_embed_key].shape}")
             
+            # Đếm tổng số tham số trong processed_state_dict
+            total_params_processed = sum(p.numel() for p in [v for k, v in processed_state_dict.items()])
+            logging.info(f"Tổng số tham số sau khi xử lý: {total_params_processed:,}")
+            
+            # Đếm tổng số tham số trong model
+            total_params_model = sum(p.numel() for p in self.model.parameters())
+            logging.info(f"Tổng số tham số trong TimeSformer model: {total_params_model:,}")
+            
             # Load weights vào model
             missing, unexpected = self.model.load_state_dict(processed_state_dict, strict=False)
             
@@ -756,6 +765,14 @@ class TimeSformer(nn.Module):
                     logging.info(f"Unexpected keys: {unexpected}")
                 else:
                     logging.info(f"First 10 unexpected keys: {unexpected[:10]}...")
+            
+            # Tính số tham số đã được load
+            params_loaded = total_params_processed - (sum(p.numel() for k in unexpected for p in [processed_state_dict[k]]) if unexpected else 0)
+            params_remaining = sum(p.numel() for n, p in self.model.named_parameters() if any(m == n for m in missing)) if missing else 0
+            
+            logging.info(f"Số tham số đã load thành công: {params_loaded:,} ({params_loaded/total_params_model:.2%} của model)")
+            if params_remaining > 0:
+                logging.info(f"Số tham số còn thiếu: {params_remaining:,} ({params_remaining/total_params_model:.2%} của model)")
             
             logging.info(f"Successfully loaded TimeSformer weights from {checkpoint_path}")
             return True
