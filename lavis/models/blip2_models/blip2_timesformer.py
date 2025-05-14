@@ -35,13 +35,12 @@ class Blip2TimeSformer(Blip2Base):
         drop_path_rate=0.1,
         use_grad_checkpointing=False,
         vit_precision="fp16",
-        freeze_vit=True,
+        freeze_vit=False,
         num_query_token=32,
         cross_attention_freq=2,
         embed_dim=768,
         max_txt_len=32,
-        timesformer_weight_path=None,
-        timesformer_model_type="alpro",
+
     ):
         super().__init__()
         
@@ -78,13 +77,6 @@ class Blip2TimeSformer(Blip2Base):
                 self.visual_encoder.model.remove_classifier()
                 logger.info("✓ Đã xóa classifier")
 
-        # Nếu có đường dẫn cụ thể, ghi đè weights đã load từ ImageNet
-        if timesformer_weight_path:
-            logger.info(f"Đang load TimeSformer weights từ đường dẫn được chỉ định: {timesformer_weight_path}")
-            self.load_timesformer_from_pretrained(
-                timesformer_weight_path, 
-                model_type=timesformer_model_type
-            )
 
         # Kiểm tra xem TimeSformer đã có weights hay chưa
         if hasattr(self.visual_encoder, "model") and hasattr(self.visual_encoder.model, "pos_embed"):
@@ -591,21 +583,6 @@ class Blip2TimeSformer(Blip2Base):
         embed_dim = cfg.get("embed_dim", 768)
         max_txt_len = cfg.get("max_txt_len", 32)
         
-        # Lấy đường dẫn và loại model cho TimeSformer
-        timesformer_weight_path = None
-        timesformer_model_type = cfg.get("timesformer_model_type", "alpro")
-        
-        if hasattr(cfg, "timesformer_pretrained") and cfg.timesformer_pretrained:
-            if is_url(cfg.timesformer_pretrained) or os.path.isfile(cfg.timesformer_pretrained):
-                timesformer_weight_path = cfg.timesformer_pretrained
-
-        # Lấy đường dẫn cho QFormer weights (thêm mới)
-        qformer_weight_path = None
-        if hasattr(cfg, "qformer_pretrained") and cfg.qformer_pretrained:
-            if is_url(cfg.qformer_pretrained) or os.path.isfile(cfg.qformer_pretrained):
-                qformer_weight_path = cfg.qformer_pretrained
-        
-        logger = logging.getLogger(__name__)
 
         model = cls(
             vit_model=vit_model,
@@ -619,17 +596,7 @@ class Blip2TimeSformer(Blip2Base):
             cross_attention_freq=cross_attention_freq,
             embed_dim=embed_dim,
             max_txt_len=max_txt_len,
-            timesformer_weight_path=timesformer_weight_path,
-            timesformer_model_type=timesformer_model_type,
         )
-        
-        # TimeSformer weights đã được load trong __init__ nếu timesformer_weight_path được cung cấp
-        
-        # Load QFormer weights nếu có đường dẫn (thêm mới)
-        if qformer_weight_path:
-            logger.info(f"Đang load QFormer weights từ {qformer_weight_path}")
-            msg = model.load_from_pretrained(qformer_weight_path)
-            logger.info(f"Load QFormer weights thành công, missing keys: {len(msg.missing_keys)}")
         
         return model
 

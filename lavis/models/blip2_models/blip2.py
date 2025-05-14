@@ -46,27 +46,12 @@ def create_timesformer(img_size, num_frames, drop_path_rate, use_grad_checkpoint
     # Mặc định load weights từ Kinetics pretrained
     logging.info("Đang load TimeSformer weights từ Kinetics pretrained")
     try:
-        # Đường dẫn đến pretrained Kinetics weights
-        pretrained_path = "/storage/student10/vidcaption/LAVIS/alpro_msrvtt_qa.pth"
+    
+        visual_encoder.load_state_dict("vit_base_patch16_224")
         
-        # Gọi phương thức load_state_dict của TimeSformer
-        # Bất kỳ đường dẫn nào khác "vit_base_patch16_224" sẽ sử dụng load_pretrained_kinetics
-        state_dict = torch.load(pretrained_path, map_location="cpu")
-        
-        # ALPRO lưu weights với tiền tố "model.", nhưng TimeSformer cần trực tiếp
-        new_state_dict = {}
-        for k, v in state_dict.items():
-            if k.startswith('model.'):
-                new_k = k[6:]  # Bỏ "model." ở đầu
-                new_state_dict[new_k] = v
-            else:
-                new_state_dict[k] = v
-        
-        visual_encoder.load_state_dict(new_state_dict)
-        
-        logging.info("✓ Đã load TimeSformer weights từ Kinetics thành công")
+        logging.info("✓ Đã load TimeSformer weights thành công")
     except Exception as e:
-        logging.warning(f"⚠️ Không thể load TimeSformer weights từ Kinetics: {str(e)}")
+        logging.warning(f"⚠️ Không thể load TimeSformer weights: {str(e)}")
         logging.warning("Model sẽ được khởi tạo với trọng số ngẫu nhiên")
     
     return visual_encoder
