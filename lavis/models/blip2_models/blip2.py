@@ -189,10 +189,6 @@ class Blip2Base(BaseModel):
 
         return optimizer_config
 
-    def disabled_train(self, mode=True):
-        """Overwrite model.train with this function to make sure train/eval mode
-        does not change anymore."""
-        return self
 
     def _lemmatize(self, answers):
         def apply(answer):
@@ -231,6 +227,10 @@ class Blip2Base(BaseModel):
 
         return self._lemmatizer
 
+def disabled_train(self, mode=True):
+    """Overwrite model.train with this function to make sure train/eval mode
+    does not change anymore."""
+    return self
 
 class LayerNorm(nn.LayerNorm):
     """Subclass torch's LayerNorm to handle fp16."""
