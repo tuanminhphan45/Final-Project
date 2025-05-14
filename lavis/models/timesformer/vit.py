@@ -685,12 +685,50 @@ class TimeSformer(nn.Module):
                     # Direct key format - add model. prefix for TimeSformer
                     processed_state_dict["model." + k] = v
             
+            # Debug: Hiển thị một số keys đầu tiên để kiểm tra
+            logging.info(f"Sample keys after processing: {list(processed_state_dict.keys())[:5]}")
+            
+            # Xử lý mismatch giữa số frames
+            # Kiểm tra cả hai định dạng key có thể có
+            time_embed_key_1 = "model.time_embed"
+            time_embed_key_2 = "time_embed"
+            
+            if time_embed_key_1 in processed_state_dict:
+                time_embed_key = time_embed_key_1
+            elif time_embed_key_2 in processed_state_dict:
+                time_embed_key = time_embed_key_2
+            else:
+                logging.warning("Không tìm thấy time_embed trong checkpoint")
+                time_embed_key = None
+                
+            if time_embed_key and self.num_frames != processed_state_dict[time_embed_key].size(1):
+                original_frames = processed_state_dict[time_embed_key].size(1)
+                logging.info(f"Đang resize time_embed từ {original_frames} frames sang {self.num_frames} frames")
+                
+                time_embed = processed_state_dict[time_embed_key].transpose(1, 2)
+                new_time_embed = F.interpolate(time_embed, size=(self.num_frames), mode="nearest")
+                processed_state_dict[time_embed_key] = new_time_embed.transpose(1, 2)
+                
+                # Kiểm tra kích thước sau khi resize
+                new_shape = processed_state_dict[time_embed_key].shape
+                logging.info(f"Kích thước time_embed sau khi resize: {new_shape}")
+            
             # Xử lý spatial embedding nếu cần
-            pos_embed_key = "model.pos_embed"
-            if pos_embed_key in processed_state_dict:
+            pos_embed_key_1 = "model.pos_embed"
+            pos_embed_key_2 = "pos_embed"
+            
+            if pos_embed_key_1 in processed_state_dict:
+                pos_embed_key = pos_embed_key_1
+            elif pos_embed_key_2 in processed_state_dict:
+                pos_embed_key = pos_embed_key_2
+            else:
+                logging.warning("Không tìm thấy pos_embed trong checkpoint")
+                pos_embed_key = None
+                
+            if pos_embed_key:
                 num_patches = (self.img_size // self.patch_size) ** 2
                 if num_patches + 1 != processed_state_dict[pos_embed_key].size(1):
-                    logging.info(f"Adjusting pos_embed from {processed_state_dict[pos_embed_key].size(1)} to {num_patches + 1}")
+                    logging.info(f"Đang resize pos_embed từ {processed_state_dict[pos_embed_key].size(1)} tokens sang {num_patches + 1} tokens")
                     
                     pos_embed = processed_state_dict[pos_embed_key]
                     cls_pos_embed = pos_embed[0, 0, :].unsqueeze(0).unsqueeze(1)
@@ -701,19 +739,9 @@ class TimeSformer(nn.Module):
                     new_pos_embed = torch.cat((cls_pos_embed, new_pos_embed), 1)
                     
                     processed_state_dict[pos_embed_key] = new_pos_embed
-            
-            # Xử lý temporal embedding nếu cần
-            time_embed_key = "model.time_embed"
-            if time_embed_key in processed_state_dict and self.num_frames != processed_state_dict[time_embed_key].size(1):
-                original_frames = processed_state_dict[time_embed_key].size(1)
-                logging.info(f"Adjusting time_embed from {original_frames} to {self.num_frames}")
-                
-                time_embed = processed_state_dict[time_embed_key].transpose(1, 2)
-                new_time_embed = F.interpolate(time_embed, size=(self.num_frames), mode="nearest")
-                processed_state_dict[time_embed_key] = new_time_embed.transpose(1, 2)
-            
-            # Debug: Hiển thị một số keys đầu tiên để kiểm tra
-            logging.info(f"Sample keys after processing: {list(processed_state_dict.keys())[:5]}")
+                    
+                    # Kiểm tra kích thước sau khi resize
+                    logging.info(f"Kích thước pos_embed sau khi resize: {processed_state_dict[pos_embed_key].shape}")
             
             # Load weights vào model
             missing, unexpected = self.model.load_state_dict(processed_state_dict, strict=False)

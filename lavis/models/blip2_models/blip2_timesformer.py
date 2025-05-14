@@ -31,7 +31,7 @@ class Blip2TimeSformer(Blip2Base):
         self,
         vit_model="timesformer",
         img_size=224,
-        num_frames=16,
+        num_frames=8,
         drop_path_rate=0.1,
         use_grad_checkpointing=True,
         vit_precision="fp16",
