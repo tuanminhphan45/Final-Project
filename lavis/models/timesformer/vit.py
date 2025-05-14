@@ -13,6 +13,7 @@
 
 import logging
 from functools import partial
+import os
 
 import torch
 import torch.nn as nn
@@ -632,3 +633,104 @@ class TimeSformer(nn.Module):
             attention_type=self.attention_type,
             pretrained_model=pretrained_ckpt_path,
         )
+        
+    def load_checkpoint(self, checkpoint_path):
+        """
+        Load weights directly from a local checkpoint file
+        Args:
+            checkpoint_path: Path to local checkpoint file
+        """
+        if not os.path.isfile(checkpoint_path):
+            raise ValueError(f"Checkpoint file not found: {checkpoint_path}")
+        
+        logging.info(f"Loading TimeSformer weights from local file: {checkpoint_path}")
+        
+        try:
+            # Tải checkpoint
+            checkpoint = torch.load(checkpoint_path, map_location="cpu")
+            
+            # Xử lý các định dạng checkpoint khác nhau
+            if "model" in checkpoint:
+                state_dict = checkpoint["model"]
+                logging.info("Found weights in 'model' key")
+            elif "module" in checkpoint:
+                state_dict = checkpoint["module"]
+                logging.info("Found weights in 'module' key")
+            elif "state_dict" in checkpoint:
+                state_dict = checkpoint["state_dict"]
+                logging.info("Found weights in 'state_dict' key")
+            else:
+                state_dict = checkpoint
+                logging.info("Using checkpoint directly as state_dict")
+            
+            # Xử lý các prefix của key
+            processed_state_dict = {}
+            for k, v in state_dict.items():
+                if k.startswith("visual.model."):
+                    # ALPRO format
+                    new_k = "model." + k[len("visual.model."):]
+                    processed_state_dict[new_k] = v
+                elif k.startswith("visual_encoder.model."):
+                    # BLIP2 TimeSformer format
+                    new_k = "model." + k[len("visual_encoder.model."):]
+                    processed_state_dict[new_k] = v
+                elif k.startswith("model."):
+                    # Already has model prefix
+                    processed_state_dict[k] = v
+                else:
+                    # Direct key format
+                    new_k = "model." + k
+                    processed_state_dict[new_k] = v
+                    
+            # Xử lý spatial embedding nếu cần
+            pos_embed_key = "model.pos_embed"
+            if pos_embed_key in processed_state_dict:
+                num_patches = (self.img_size // self.patch_size) ** 2
+                if num_patches + 1 != processed_state_dict[pos_embed_key].size(1):
+                    logging.info(f"Adjusting pos_embed from {processed_state_dict[pos_embed_key].size(1)} to {num_patches + 1}")
+                    
+                    pos_embed = processed_state_dict[pos_embed_key]
+                    cls_pos_embed = pos_embed[0, 0, :].unsqueeze(0).unsqueeze(1)
+                    other_pos_embed = pos_embed[0, 1:, :].unsqueeze(0).transpose(1, 2)
+                    
+                    new_pos_embed = F.interpolate(other_pos_embed, size=(num_patches), mode="nearest")
+                    new_pos_embed = new_pos_embed.transpose(1, 2)
+                    new_pos_embed = torch.cat((cls_pos_embed, new_pos_embed), 1)
+                    
+                    processed_state_dict[pos_embed_key] = new_pos_embed
+            
+            # Xử lý temporal embedding nếu cần
+            time_embed_key = "model.time_embed"
+            if time_embed_key in processed_state_dict and self.num_frames != processed_state_dict[time_embed_key].size(1):
+                original_frames = processed_state_dict[time_embed_key].size(1)
+                logging.info(f"Adjusting time_embed from {original_frames} to {self.num_frames}")
+                
+                time_embed = processed_state_dict[time_embed_key].transpose(1, 2)
+                new_time_embed = F.interpolate(time_embed, size=(self.num_frames), mode="nearest")
+                processed_state_dict[time_embed_key] = new_time_embed.transpose(1, 2)
+                
+            # Load weights vào model
+            missing, unexpected = self.model.load_state_dict(processed_state_dict, strict=False)
+            
+            if len(missing) > 0:
+                logging.info(f"Missing keys: {len(missing)}")
+                if len(missing) < 10:
+                    logging.info(f"Missing keys: {missing}")
+                else:
+                    logging.info(f"First 10 missing keys: {missing[:10]}...")
+                    
+            if len(unexpected) > 0:
+                logging.info(f"Unexpected keys: {len(unexpected)}")
+                if len(unexpected) < 10:
+                    logging.info(f"Unexpected keys: {unexpected}")
+                else:
+                    logging.info(f"First 10 unexpected keys: {unexpected[:10]}...")
+            
+            logging.info(f"Successfully loaded TimeSformer weights from {checkpoint_path}")
+            return True
+            
+        except Exception as e:
+            logging.error(f"Error loading checkpoint: {str(e)}")
+            import traceback
+            logging.error(traceback.format_exc())
+            return False

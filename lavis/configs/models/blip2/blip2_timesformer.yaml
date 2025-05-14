@@ -1,6 +1,6 @@
 model:
-  arch: blip2_timesformer
-  
+  arch: pretrain
+  load_finetuned: False
   vit_model: timesformer
   image_size: 224
   num_frames: 16
