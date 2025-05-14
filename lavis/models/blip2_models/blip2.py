@@ -44,16 +44,15 @@ def create_timesformer(img_size, num_frames, drop_path_rate, use_grad_checkpoint
     )
     
     # Mặc định load weights từ ImageNet pretrained
-    logging.info("Đang load TimeSformer weights từ ImageNet pretrained")
+    logging.info("Đang load TimeSformer weights từ Kinetics pretrained")
     try:
-        visual_encoder.load_state_dict("vit_base_patch16_224")
-        logging.info("✓ Đã load TimeSformer weights từ ImageNet thành công")
+        visual_encoder.load_state_dict()
+        logging.info("✓ Đã load TimeSformer weights từ Kinetics thành công")
     except Exception as e:
-        logging.warning(f"⚠️ Không thể load TimeSformer weights từ ImageNet: {str(e)}")
+        logging.warning(f"⚠️ Không thể load TimeSformer weights từ Kinetics: {str(e)}")
         logging.warning("Model sẽ được khởi tạo với trọng số ngẫu nhiên")
     
     return visual_encoder
-
 
 class Blip2Base(BaseModel):
     @classmethod
