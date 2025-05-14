@@ -650,15 +650,18 @@ class TimeSformer(nn.Module):
             checkpoint = torch.load(checkpoint_path, map_location="cpu")
             
             # Xử lý các định dạng checkpoint khác nhau
-            if "model" in checkpoint:
-                state_dict = checkpoint["model"]
+            if "model_state" in checkpoint:
+                logging.info("Found weights in 'model_state' key")
+                state_dict = checkpoint["model_state"]
+            elif "model" in checkpoint:
                 logging.info("Found weights in 'model' key")
+                state_dict = checkpoint["model"]
             elif "module" in checkpoint:
-                state_dict = checkpoint["module"]
                 logging.info("Found weights in 'module' key")
+                state_dict = checkpoint["module"]
             elif "state_dict" in checkpoint:
-                state_dict = checkpoint["state_dict"]
                 logging.info("Found weights in 'state_dict' key")
+                state_dict = checkpoint["state_dict"]
             else:
                 state_dict = checkpoint
                 logging.info("Using checkpoint directly as state_dict")
@@ -674,10 +677,14 @@ class TimeSformer(nn.Module):
                     # BLIP2 TimeSformer format
                     new_k = k[len("visual_encoder."):]
                     processed_state_dict[new_k] = v
+                elif k.startswith("model."):
+                    # Extract from model. prefix
+                    new_k = k[len("model."):]
+                    processed_state_dict[new_k] = v
                 else:
-                    # Direct key format
-                    processed_state_dict[k] = v
-                    
+                    # Direct key format - add model. prefix for TimeSformer
+                    processed_state_dict["model." + k] = v
+            
             # Xử lý spatial embedding nếu cần
             pos_embed_key = "model.pos_embed"
             if pos_embed_key in processed_state_dict:
@@ -704,7 +711,10 @@ class TimeSformer(nn.Module):
                 time_embed = processed_state_dict[time_embed_key].transpose(1, 2)
                 new_time_embed = F.interpolate(time_embed, size=(self.num_frames), mode="nearest")
                 processed_state_dict[time_embed_key] = new_time_embed.transpose(1, 2)
-                
+            
+            # Debug: Hiển thị một số keys đầu tiên để kiểm tra
+            logging.info(f"Sample keys after processing: {list(processed_state_dict.keys())[:5]}")
+            
             # Load weights vào model
             missing, unexpected = self.model.load_state_dict(processed_state_dict, strict=False)
             
