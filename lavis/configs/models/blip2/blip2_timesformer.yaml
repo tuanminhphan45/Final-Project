@@ -7,25 +7,15 @@ model:
   drop_path_rate: 0.1
   use_grad_checkpointing: False
   vit_precision: fp16
-  freeze_vit: False
+  freeze_vit: True
   
   # Q-Former settings
   num_query_token: 128
   cross_attention_freq: 2
   embed_dim: 768
   max_txt_len: 32
-  
-  # Load pretrained Q-former weights from BLIP2
-  # Available options:
-  # - "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained.pth"
-  # - "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained_vitL.pth"
-  pretrained_qformer_path: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained.pth"
-  
-  # TimeSformer-specific checkpoint (optional)
-  # ALPRO provides a pretrained TimeSformer model for video processing
+    
   #timesformer_pretrained: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/ALPRO/alpro_msrvtt_qa.pth"
-  
-  # TimeSformer configuration (following ALPRO settings)
   timesformer:
     image_size: 224
     patch_size: 16
