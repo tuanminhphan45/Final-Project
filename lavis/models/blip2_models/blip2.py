@@ -47,11 +47,11 @@ def create_timesformer(img_size, num_frames, drop_path_rate, use_grad_checkpoint
     logging.info("Đang load TimeSformer weights từ Kinetics pretrained")
     try:
         # Đường dẫn đến pretrained Kinetics weights
-        pretrained_path = "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/ALPRO/alpro_msrvtt_qa.pth"
+        pretrained_path = "/storage/student10/vidcaption/LAVIS/alpro_msrvtt_qa.pth"
         
         # Gọi phương thức load_state_dict của TimeSformer
         # Bất kỳ đường dẫn nào khác "vit_base_patch16_224" sẽ sử dụng load_pretrained_kinetics
-        visual_encoder.load_state_dict(pretrained_path)
+        visual_encoder.load_checkpoint(pretrained_path)
         
         logging.info("✓ Đã load TimeSformer weights từ Kinetics thành công")
     except Exception as e:
