@@ -46,7 +46,7 @@ def create_timesformer(img_size, num_frames, drop_path_rate, use_grad_checkpoint
     # Mặc định load weights từ ImageNet pretrained
     logging.info("Đang load TimeSformer weights từ Kinetics pretrained")
     try:
-        visual_encoder.load_state_dict()
+        visual_encoder.load_state_dict("Kinetics")
         logging.info("✓ Đã load TimeSformer weights từ Kinetics thành công")
     except Exception as e:
         logging.warning(f"⚠️ Không thể load TimeSformer weights từ Kinetics: {str(e)}")
