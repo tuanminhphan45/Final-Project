@@ -628,6 +628,14 @@ class Blip2TimeSformer(Blip2Base):
             if is_url(cfg.timesformer_pretrained) or os.path.isfile(cfg.timesformer_pretrained):
                 timesformer_weight_path = cfg.timesformer_pretrained
 
+        # Lấy đường dẫn cho QFormer weights (thêm mới)
+        qformer_weight_path = None
+        if hasattr(cfg, "qformer_pretrained") and cfg.qformer_pretrained:
+            if is_url(cfg.qformer_pretrained) or os.path.isfile(cfg.qformer_pretrained):
+                qformer_weight_path = cfg.qformer_pretrained
+        
+        logger = logging.getLogger(__name__)
+
         model = cls(
             vit_model=vit_model,
             img_size=img_size,
@@ -646,8 +654,11 @@ class Blip2TimeSformer(Blip2Base):
         
         # TimeSformer weights đã được load trong __init__ nếu timesformer_weight_path được cung cấp
         
-        # BỎ LOAD QFORMER WEIGHTS
-        # Không load pretrained QFormer để tránh lỗi size mismatch
+        # Load QFormer weights nếu có đường dẫn (thêm mới)
+        if qformer_weight_path:
+            logger.info(f"Đang load QFormer weights từ {qformer_weight_path}")
+            msg = model.load_from_pretrained(qformer_weight_path)
+            logger.info(f"Load QFormer weights thành công, missing keys: {len(msg.missing_keys)}")
         
         return model
 
@@ -933,12 +944,14 @@ class Blip2TimeSformer(Blip2Base):
                 else:
                     logger.warning("⚠️ QFormer weights KHÔNG thay đổi sau khi load!")
         
-        logger.info("Missing keys {}".format(msg.missing_keys))
+        logger.info("Missing keys {}".format(len(msg.missing_keys)))
         if msg.missing_keys:
             logger.info(f"Một số missing keys: {msg.missing_keys[:5]}...")
         
         if msg.unexpected_keys:
-            logger.info(f"Unexpected keys: {msg.unexpected_keys[:5]}...")
+            logger.info(f"Unexpected keys: {len(msg.unexpected_keys)}")
+            if msg.unexpected_keys:
+                logger.info(f"Một số unexpected keys: {msg.unexpected_keys[:5]}...")
         
         logger.info("✓ Đã load checkpoint thành công")
         logger.info("===== KẾT THÚC LOAD PRETRAINED BLIP2 WEIGHTS =====")

@@ -13,7 +13,8 @@ model:
   embed_dim: 768
   max_txt_len: 32
   timesformer_model_type: alpro
-  timesformer_pretrained: https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/ALPRO/alpro_pretrain.pt
+  timesformer_pretrained: https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained.pth
+  qformer_pretrained: "/storage/student10/vidcaption/LAVIS/lavis/output/BLIP2_TimeSformer/pretrain_stage1/20250513063/checkpoint_9.pth"
 
 datasets:
   msrvtt:  # name of the dataset builder
@@ -42,15 +43,15 @@ run:
 
   # distribution-specific
   device: "cuda"
-  world_size: 1
+  world_size: 4
   dist_url: "env://"
   distributed: True
   amp: true
   resume: false
 
   # checkpoint configuration
-  resume_ckpt_path: "/storage/student10/vidcaption/LAVIS/lavis/output/BLIP2_TimeSformer/pretrain_stage1/20250509030/checkpoint_29.pth"
-  eval_ckpt_path: "/storage/student10/vidcaption/LAVIS/lavis/output/BLIP2_TimeSformer/pretrain_stage1/20250509030/checkpoint_29.pth"
+  resume_ckpt_path: "/storage/student10/vidcaption/LAVIS/lavis/output/BLIP2_TimeSformer/pretrain_stage1/20250513063/checkpoint_9.pth"
+  eval_ckpt_path: "/storage/student10/vidcaption/LAVIS/lavis/output/BLIP2_TimeSformer/pretrain_stage1/20250513063/checkpoint_9.pth"
 
 evaluation:
   caption:
