@@ -340,7 +340,7 @@ class Blip2TimeSformer(Blip2Base):
         num_beams: int = 5,
         max_length: int = 50,
         min_length: int = 10,
-        #top_p: float = 0.9,
+        top_p: float = 0.9,
         repetition_penalty: float = 1.0,
     ):
         """
@@ -608,10 +608,6 @@ class Blip2TimeSformer(Blip2Base):
                 model.checkpoint_path = pretrained_path
                 msg = model.load_checkpoint(pretrained_path)
                 logging.info(f"Tải checkpoint thành công: {pretrained_path}")
-                if msg:
-                    missing_keys = len(msg.missing_keys) if hasattr(msg, 'missing_keys') else 0
-                    unexpected_keys = len(msg.unexpected_keys) if hasattr(msg, 'unexpected_keys') else 0
-                    logging.info(f"Có {missing_keys} missing keys và {unexpected_keys} unexpected keys")
             else:
                 logging.warning(f"⚠️ Không tìm thấy file checkpoint: {pretrained_path}")
                 model.checkpoint_path = None
