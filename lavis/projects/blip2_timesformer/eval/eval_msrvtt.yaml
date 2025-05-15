@@ -1,6 +1,6 @@
 model:
   arch: blip2_timesformer
-  model_type: caption_msrvtt
+  model_type: msrvtt
 
 
 datasets:
