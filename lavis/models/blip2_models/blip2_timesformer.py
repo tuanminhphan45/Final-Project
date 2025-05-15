@@ -342,6 +342,8 @@ class Blip2TimeSformer(Blip2Base):
         min_length: int = 10,
         top_p: float = 0.9,
         repetition_penalty: float = 1.0,
+        length_penalty: float = 1.0,
+        temperature: float = 1.0,
     ):
         """
         Generate captions for video input.
@@ -354,6 +356,7 @@ class Blip2TimeSformer(Blip2Base):
             top_p: nucleus sampling probability mass.
             repetition_penalty: penalize repeated tokens.
             length_penalty: beam-search length penalty.
+            temperature: temperature for sampling (higher = more diverse).
         Returns:
             List[str]: decoded captions of length B.
         """
@@ -407,6 +410,9 @@ class Blip2TimeSformer(Blip2Base):
             num_beams=num_beams,
             do_sample=use_nucleus_sampling,
             top_p=top_p,
+            temperature=temperature,
+            length_penalty=length_penalty,
+            repetition_penalty=repetition_penalty,
             eos_token_id=self.tokenizer.sep_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
             **model_kwargs
