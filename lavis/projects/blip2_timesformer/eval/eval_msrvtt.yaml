@@ -1,6 +1,6 @@
 model:
   arch: blip2_timesformer
-  model_type: msrvtt
+  model_type: pretrain
 
 
 datasets:
