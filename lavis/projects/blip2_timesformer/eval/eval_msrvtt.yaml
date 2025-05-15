@@ -8,7 +8,7 @@ datasets:
     vis_processor:
         eval:
           name: "alpro_video_eval"
-          n_frms: 16
+          n_frms: 8
           image_size: 224
     text_processor:
         eval:
