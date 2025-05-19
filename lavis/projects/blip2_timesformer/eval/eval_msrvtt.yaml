@@ -18,10 +18,12 @@ run:
   task: captioning
   batch_size_train: 16
   batch_size_eval: 8
-  num_workers: 4
+  num_workers: 3
   max_len: 30
-  min_len: 8
-  num_beams: 5
+  min_len: 10
+  num_beams: 3
+  report_metric: True
+  annotation_file: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/cap_test.json
 
   seed: 42
   output_dir: "output/BLIP2_TimeSformer/Caption_msrvtt"
