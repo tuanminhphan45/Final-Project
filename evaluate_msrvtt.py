@@ -10,10 +10,10 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.distributed import DistributedSampler
-from nltk.translate.bleu_score import corpus_bleu
-from nltk.translate.meteor_score import meteor_score
-from rouge import Rouge
-from cider.cider import Cider
+from pycocoevalcap.bleu.bleu import Bleu
+from pycocoevalcap.meteor.meteor import Meteor
+from pycocoevalcap.rouge.rouge import Rouge
+from pycocoevalcap.cider.cider import Cider
 from lavis.processors.alpro_processors import AlproVideoEvalProcessor
 from lavis.models.blip2_models.blip2_timesformer import Blip2TimeSformer
 
@@ -86,40 +86,33 @@ def prepare_references(annotations):
     return video_to_captions
 
 def compute_metrics(predictions, references):
-    """Tính toán các metrics"""
-    # Chuẩn bị dữ liệu cho BLEU
-    refs = [[ref.split() for ref in refs] for refs in references]
-    hyps = [pred.split() for pred in predictions]
-    
-    # BLEU
-    bleu1 = corpus_bleu(refs, hyps, weights=(1, 0, 0, 0))
-    bleu2 = corpus_bleu(refs, hyps, weights=(0.5, 0.5, 0, 0))
-    bleu3 = corpus_bleu(refs, hyps, weights=(0.33, 0.33, 0.33, 0))
-    bleu4 = corpus_bleu(refs, hyps, weights=(0.25, 0.25, 0.25, 0.25))
-    
-    # METEOR
-    meteor_scores = []
-    for pred, refs_list in zip(predictions, references):
-        meteor_scores.append(max(meteor_score([ref], pred) for ref in refs_list))
-    meteor = np.mean(meteor_scores)
-    
-    # ROUGE
-    rouge = Rouge()
-    rouge_scores = rouge.get_scores(predictions, [refs[0] for refs in references], avg=True)
-    
-    # CIDEr
-    cider = Cider()
-    cider_score, _ = cider.compute_score(references, predictions)
-    
-    return {
-        'BLEU-1': bleu1,
-        'BLEU-2': bleu2,
-        'BLEU-3': bleu3,
-        'BLEU-4': bleu4,
-        'METEOR': meteor,
-        'ROUGE-L': rouge_scores['rouge-l']['f'],
-        'CIDEr': cider_score
-    }
+    """Tính toán các metrics sử dụng pycocoevalcap"""
+    # Chuẩn bị dữ liệu cho evaluation
+    gts = {}
+    res = {}
+    for i, (pred, refs) in enumerate(zip(predictions, references)):
+        gts[i] = refs
+        res[i] = [pred]
+
+    # Khởi tạo scorers
+    scorers = [
+        (Bleu(4), ["BLEU-1", "BLEU-2", "BLEU-3", "BLEU-4"]),
+        (Meteor(), "METEOR"),
+        (Rouge(), "ROUGE-L"),
+        (Cider(), "CIDEr")
+    ]
+
+    # Tính toán metrics
+    metrics = {}
+    for scorer, method in scorers:
+        score, scores = scorer.compute_score(gts, res)
+        if isinstance(method, list):
+            for sc, m in zip(score, method):
+                metrics[m] = sc
+        else:
+            metrics[method] = score
+
+    return metrics
 
 def main():
     parser = argparse.ArgumentParser()
