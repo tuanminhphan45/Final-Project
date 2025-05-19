@@ -123,12 +123,24 @@ def prepare_references(annotations):
 
 def compute_metrics(predictions, references):
     """Tính toán các metrics sử dụng pycocoevalcap"""
+    # In thông tin để debug
+    if references and len(references) > 0:
+        logger.info(f"Số lượng video để đánh giá: {len(predictions)}")
+        logger.info(f"Số lượng references cho video đầu tiên: {len(references[0])}")
+        
     # Chuẩn bị dữ liệu cho evaluation
     gts = {}
     res = {}
     for i, (pred, refs) in enumerate(zip(predictions, references)):
         gts[i] = refs
         res[i] = [pred]
+    
+    # In thêm thông tin về dữ liệu đã chuẩn bị
+    if gts and len(gts) > 0:
+        first_key = list(gts.keys())[0]
+        logger.info(f"Dữ liệu đánh giá cho video đầu tiên (id={first_key}):")
+        logger.info(f"  - Số lượng references: {len(gts[first_key])}")
+        logger.info(f"  - Prediction: {res[first_key][0]}")
 
     # Khởi tạo scorers
     scorers = [
@@ -266,13 +278,19 @@ def main():
             video_ids = batch['video_id']
             captions = batch['captions']
 
+            # Kiểm tra số lượng caption cho mỗi video
+            for vid, caps in zip(video_ids, captions):
+                logger.info(f"Video {vid} có {len(caps)} caption để đánh giá")
+                # Chỉ in ra 2 video đầu tiên để không làm log quá dài
+                break
+
             # Generate captions
             with torch.amp.autocast(device_type='cuda'):
                 generated_captions = model.generate(
                     {"video": videos},
                     use_nucleus_sampling=False,
                     num_beams=3,
-                    max_length=30,
+                    max_length=40,
                     min_length=10,
                     top_p=0.9,
                     repetition_penalty=1.15,
@@ -282,20 +300,31 @@ def main():
             for video_id, pred_caption, ref_captions in zip(video_ids, generated_captions, captions):
                 predictions.append(pred_caption)
                 references.append(ref_captions)
+                # Lưu tất cả caption trong kết quả
                 results.append({
                     'video_id': video_id,
                     'predicted_caption': pred_caption,
-                    'reference_captions': ref_captions
+                    'reference_captions': ref_captions,
+                    'num_references': len(ref_captions)  # Thêm số lượng reference để kiểm tra
                 })
 
     # 6. Tính toán metrics
     logger.info("Tính toán metrics...")
+    # Kiểm tra số lượng caption trung bình được sử dụng
+    avg_refs = sum(len(refs) for refs in references) / len(references) if references else 0
+    logger.info(f"Số lượng reference trung bình mỗi video: {avg_refs:.2f}")
+    
+    # Log một số ví dụ
+    if references:
+        logger.info(f"Ví dụ: Video đầu tiên có {len(references[0])} caption")
+        
     metrics = compute_metrics(predictions, references)
     
     # 7. Lưu kết quả
     output = {
         'metrics': metrics,
-        'results': results
+        'results': results,
+        'avg_references_per_video': avg_refs
     }
     
     with open(args.output_file, 'w') as f:
