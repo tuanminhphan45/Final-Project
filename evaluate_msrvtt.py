@@ -33,8 +33,16 @@ class MSRVTTDataset(Dataset):
     
     def __getitem__(self, idx):
         video_id = self.video_ids[idx]
-        video_path = os.path.join(self.video_dir, f"{video_id}.mp4")
         captions = self.annotations[video_id]
+        
+        # Đường dẫn video có thể có hoặc không có đuôi .mp4
+        video_path = os.path.join(self.video_dir, f"{video_id}.mp4")
+        if not os.path.exists(video_path):
+            # Thử lại nếu file không tồn tại (có thể video_id đã có đuôi .mp4)
+            video_path = os.path.join(self.video_dir, video_id)
+            if not os.path.exists(video_path):
+                logger.error(f"Không tìm thấy video: {video_id}")
+                return None
         
         try:
             processed = self.video_processor(video_path)
@@ -88,16 +96,35 @@ def load_msrvtt_annotations(annotation_file):
     """Load MSR-VTT annotations"""
     with open(annotation_file, 'r') as f:
         annotations = json.load(f)
+    
+    # In thông tin về cấu trúc file
+    if isinstance(annotations, list) and len(annotations) > 0:
+        first_item = annotations[0]
+        logger.info(f"Cấu trúc annotation: {list(first_item.keys())}")
+        logger.info(f"Số lượng annotations: {len(annotations)}")
+    else:
+        logger.info(f"Annotations không phải dạng list hoặc rỗng. Type: {type(annotations)}")
+    
     return annotations
 
 def prepare_references(annotations):
     """Chuẩn bị references cho mỗi video"""
     video_to_captions = {}
     for item in annotations:
-        video_id = item['video_id']
+        # Sử dụng trường 'video' thay vì 'video_id'
+        video_id = item.get('video', item.get('image_id'))
+        
+        # Loại bỏ đuôi .mp4 nếu có
+        if video_id.endswith('.mp4'):
+            video_id = video_id[:-4]
+            
         if video_id not in video_to_captions:
             video_to_captions[video_id] = []
         video_to_captions[video_id].append(item['caption'])
+    
+    # Log thông tin số lượng video và caption
+    logger.info(f"Đã load {len(video_to_captions)} videos với tổng cộng {sum(len(caps) for caps in video_to_captions.values())} captions")
+    
     return video_to_captions
 
 def compute_metrics(predictions, references):
