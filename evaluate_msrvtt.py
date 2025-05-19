@@ -199,16 +199,43 @@ def main():
     # 3. Load checkpoint
     if rank == 0:
         logger.info(f"Loading checkpoint {args.checkpoint}")
-    checkpoint = torch.load(args.checkpoint, map_location="cpu")
-    if "model" in checkpoint:
-        state_dict = checkpoint["model"]
-    else:
-        state_dict = checkpoint
-    
-    filtered_state_dict = {k: v for k, v in state_dict.items() if not k.startswith("visual_encoder")}
-    msg = model.load_state_dict(filtered_state_dict, strict=False)
-    if rank == 0:
-        logger.info(f"Missing keys: {len(msg.missing_keys)}, Unexpected keys: {len(msg.unexpected_keys)}")
+    try:
+        checkpoint = torch.load(args.checkpoint, map_location="cpu")
+        
+        # Kiểm tra cấu trúc checkpoint
+        if "model" in checkpoint:
+            state_dict = checkpoint["model"]
+        else:
+            state_dict = checkpoint
+            
+        # Lọc bỏ các weights của visual_encoder để tránh ghi đè lên TimeSformer đã được load
+        filtered_state_dict = {}
+        for key, value in state_dict.items():
+            if not key.startswith("visual_encoder"):
+                filtered_state_dict[key] = value
+        
+        # Load state dict đã lọc vào model
+        msg = model.load_state_dict(filtered_state_dict, strict=False)
+        if rank == 0:
+            logger.info(f"Missing keys: {len(msg.missing_keys)}, Unexpected keys: {len(msg.unexpected_keys)}")
+            if msg.missing_keys:
+                if len(msg.missing_keys) > 5:
+                    logger.info(f"missing keys: {msg.missing_keys[:5]}...")
+                else:
+                    logger.info(f"Missing keys: {msg.missing_keys}")
+            
+            # Kiểm tra số lượng parameters
+            visual_encoder_params = len([name for name, _ in model.named_parameters() if "visual_encoder" in name])
+            logger.info(f"parameters của visual_encoder: {visual_encoder_params}")
+            total_params = sum(p.numel() for p in model.parameters())
+            logger.info(f"total parameters của model: {total_params}")
+            
+    except Exception as e:
+        logger.error(f"Lỗi khi load checkpoint: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        dist.destroy_process_group()
+        exit(1)
 
     model = model.to(device).half()
     model = DDP(model, device_ids=[gpu])
