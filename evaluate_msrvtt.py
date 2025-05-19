@@ -61,12 +61,12 @@ def setup_distributed():
         rank = int(os.environ['RANK'])
         world_size = int(os.environ['WORLD_SIZE'])
         gpu = int(os.environ['LOCAL_RANK'])
-        # Map GPU index to 1,2,3
-        gpu = gpu + 1
+        # Không cần mapping GPU index vì khi sử dụng CUDA_VISIBLE_DEVICES,
+        # các GPU đã được đánh số lại từ 0
     else:
         rank = 0
         world_size = 1
-        gpu = 1  # Default to GPU 1
+        gpu = 0  # Default to GPU 0
 
     # Kiểm tra GPU có tồn tại không
     if not torch.cuda.is_available():
