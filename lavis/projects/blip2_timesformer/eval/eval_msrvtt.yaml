@@ -23,7 +23,7 @@ run:
   min_len: 10
   num_beams: 3
   report_metric: True
-  annotation_file: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/cap_test.json
+  annotation_file: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/cap_test.json"
 
   seed: 42
   output_dir: "output/BLIP2_TimeSformer/Caption_msrvtt"
