@@ -19,15 +19,9 @@ run:
   batch_size_train: 16
   batch_size_eval: 8
   num_workers: 4
-
-  report_metric: False
-
   max_len: 30
   min_len: 8
   num_beams: 5
-  temperature: 0.7
-  repetition_penalty: 1.2
-  length_penalty: 1.0
 
   seed: 42
   output_dir: "output/BLIP2_TimeSformer/Caption_msrvtt"
@@ -36,6 +30,6 @@ run:
   test_splits: ["test"]
 
   device: "cuda"
-  world_size: 3
+  world_size: 1
   dist_url: "env://"
   distributed: True

@@ -337,7 +337,7 @@ class Blip2TimeSformer(Blip2Base):
         self,
         samples,
         use_nucleus_sampling: bool = False,
-        num_beams: int = 5,
+        num_beams: int = 3,
         max_length: int = 50,
         min_length: int = 10,
         top_p: float = 0.9,
@@ -603,19 +603,19 @@ class Blip2TimeSformer(Blip2Base):
             max_txt_len=max_txt_len,
         )
         
-        # Lưu cấu hình và đường dẫn checkpoint để truy cập sau này
+        
         model.config = cfg
         
         # Nếu có checkpoint được chỉ định, tải và ghi log
         pretrained_path = cfg.get("pretrained", None)
         if pretrained_path:
-            logging.info(f"Đang tải checkpoint từ {pretrained_path}")
+            logging.info(f"Load checkpoint from {pretrained_path}")
             if os.path.isfile(pretrained_path):
                 model.checkpoint_path = pretrained_path
                 msg = model.load_checkpoint(pretrained_path)
-                logging.info(f"Tải checkpoint thành công: {pretrained_path}")
+                logging.info(f"Load checkpoint ok: {pretrained_path}")
             else:
-                logging.warning(f"⚠️ Không tìm thấy file checkpoint: {pretrained_path}")
+                logging.warning(f"Dont have file checkpoint: {pretrained_path}")
                 model.checkpoint_path = None
         else:
             model.checkpoint_path = None
