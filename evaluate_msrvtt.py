@@ -25,12 +25,24 @@ class MSRVTTDataset(Dataset):
         self.video_processor = video_processor
         self.video_ids = list(annotations.keys())
         
+        # Kiểm tra số lượng caption trung bình
+        avg_caps = sum(len(caps) for caps in annotations.values()) / len(annotations) if annotations else 0
+        logger.info(f"Trong MSRVTTDataset: Số lượng caption trung bình mỗi video: {avg_caps:.2f}")
+        
+        # Kiểm tra số caption của một số video cụ thể
+        if "video7010" in self.annotations:
+            logger.info(f"Trong MSRVTTDataset: Video7010 có {len(self.annotations['video7010'])} caption")
+        
     def __len__(self):
         return len(self.video_ids)
     
     def __getitem__(self, idx):
         video_id = self.video_ids[idx]
         captions = self.annotations[video_id]
+        
+        # Kiểm tra số lượng caption đang được trả về
+        if idx < 3:  # Chỉ log cho 3 video đầu tiên
+            logger.info(f"__getitem__: Video {video_id} đang trả về {len(captions)} caption")
         
         # Đường dẫn video có thể có hoặc không có đuôi .mp4
         video_path = os.path.join(self.video_dir, f"{video_id}.mp4")
@@ -299,6 +311,9 @@ def main():
 
             # Thu thập kết quả
             for video_id, pred_caption, ref_captions in zip(video_ids, generated_captions, captions):
+                # Kiểm tra số lượng caption của mỗi video trước khi lưu
+                logger.info(f"Lưu kết quả: Video {video_id} có {len(ref_captions)} caption reference")
+                
                 predictions.append(pred_caption)
                 references.append(ref_captions)
                 # Lưu tất cả caption trong kết quả
@@ -327,6 +342,21 @@ def main():
         'results': results,
         'avg_references_per_video': avg_refs
     }
+    
+    # Kiểm tra số lượng caption trong kết quả
+    if results:
+        caption_counts = [r['num_references'] for r in results]
+        logger.info(f"Phân phối số lượng caption trong kết quả:")
+        unique_counts = sorted(set(caption_counts))
+        for count in unique_counts:
+            num_videos = caption_counts.count(count)
+            logger.info(f"  {count} caption: {num_videos} videos")
+        
+        # Kiểm tra một số kết quả cụ thể
+        for i, r in enumerate(results[:3]):
+            logger.info(f"Kết quả {i}: video={r['video_id']}, số caption={r['num_references']}")
+            if r['num_references'] <= 4:
+                logger.warning(f"  !! Video {r['video_id']} chỉ có {r['num_references']} caption!")
     
     with open(args.output_file, 'w') as f:
         json.dump(output, f, indent=2)
