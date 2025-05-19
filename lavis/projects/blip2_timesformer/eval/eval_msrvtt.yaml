@@ -24,6 +24,9 @@ run:
   num_beams: 3
   report_metric: True
   annotation_file: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/cap_test.json"
+  load_gt_from_file: True
+  sample_id_key: "video_id"
+  caption_key: "caption"
 
   seed: 42
   output_dir: "output/BLIP2_TimeSformer/Caption_msrvtt"
