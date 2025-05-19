@@ -25,24 +25,45 @@ class MSRVTTDataset(Dataset):
         self.video_processor = video_processor
         self.video_ids = list(annotations.keys())
         
+        # Kiểm tra duplicate video_ids
+        unique_video_ids = set(self.video_ids)
+        if len(unique_video_ids) != len(self.video_ids):
+            logger.warning(f"Duplicate video_ids detected! {len(self.video_ids)} ids, but only {len(unique_video_ids)} unique ids")
+            # Đảm bảo không có video_ids trùng lặp
+            self.video_ids = list(unique_video_ids)
+            logger.info(f"Removed duplicate video_ids, {len(self.video_ids)} videos remaining")
+        else:
+            logger.info(f"No duplicate video_ids detected. {len(self.video_ids)} videos")
+            
         # Kiểm tra số lượng caption trung bình
         avg_caps = sum(len(caps) for caps in annotations.values()) / len(annotations) if annotations else 0
-        logger.info(f"Trong MSRVTTDataset: Số lượng caption trung bình mỗi video: {avg_caps:.2f}")
+        logger.info(f"In MSRVTTDataset: Average captions per video: {avg_caps:.2f}")
         
         # Kiểm tra số caption của một số video cụ thể
         if "video7010" in self.annotations:
-            logger.info(f"Trong MSRVTTDataset: Video7010 có {len(self.annotations['video7010'])} caption")
+            logger.info(f"In MSRVTTDataset: Video7010 has {len(self.annotations['video7010'])} captions")
+            
+        # Lưu video_id đã được xử lý để tránh duplicate
+        self.processed_videos = set()
         
     def __len__(self):
         return len(self.video_ids)
     
     def __getitem__(self, idx):
         video_id = self.video_ids[idx]
+        
+        # Kiểm tra nếu video đã được xử lý trước đó
+        if video_id in self.processed_videos:
+            logger.warning(f"Video {video_id} was processed before! Possible duplicate.")
+        
+        # Đánh dấu video đã xử lý
+        self.processed_videos.add(video_id)
+        
         captions = self.annotations[video_id]
         
         # Kiểm tra số lượng caption đang được trả về
         if idx < 3:  # Chỉ log cho 3 video đầu tiên
-            logger.info(f"__getitem__: Video {video_id} đang trả về {len(captions)} caption")
+            logger.info(f"__getitem__: Video {video_id} returning {len(captions)} captions")
         
         # Đường dẫn video có thể có hoặc không có đuôi .mp4
         video_path = os.path.join(self.video_dir, f"{video_id}.mp4")
@@ -50,7 +71,7 @@ class MSRVTTDataset(Dataset):
             # Thử lại nếu file không tồn tại (có thể video_id đã có đuôi .mp4)
             video_path = os.path.join(self.video_dir, video_id)
             if not os.path.exists(video_path):
-                logger.error(f"Không tìm thấy video: {video_id}")
+                logger.error(f"Video not found: {video_id}")
                 return None
         
         try:
@@ -61,7 +82,7 @@ class MSRVTTDataset(Dataset):
                 'captions': captions
             }
         except Exception as e:
-            logger.error(f"Lỗi khi xử lý video {video_id}: {str(e)}")
+            logger.error(f"Error processing video {video_id}: {str(e)}")
             return None
 
 def load_msrvtt_annotations(annotation_file):
@@ -85,6 +106,7 @@ def prepare_references(annotations):
     
     # Đếm số lượng annotation cho mỗi video để kiểm tra
     video_count = {}
+    video_ids_seen = set()
     
     for item in annotations:
         # Sử dụng trường 'video' hoặc 'image_id' làm video_id
@@ -96,6 +118,12 @@ def prepare_references(annotations):
             
         if not video_id:
             continue
+        
+        # Kiểm tra xem video_id có trùng lặp không
+        if video_id in video_ids_seen:
+            logger.info(f"Video ID already exists in annotations: {video_id}")
+        else:
+            video_ids_seen.add(video_id)
             
         # Đếm số lượng annotation
         video_count[video_id] = video_count.get(video_id, 0) + 1
@@ -108,8 +136,8 @@ def prepare_references(annotations):
             video_to_captions[video_id].append(item['caption'])
     
     # Log thông tin chi tiết
-    logger.info(f"Tổng số videos trong file: {len(video_to_captions)}")
-    logger.info(f"Tổng số caption trong file: {sum(len(caps) for caps in video_to_captions.values())}")
+    logger.info(f"Total videos in file: {len(video_to_captions)}")
+    logger.info(f"Total captions in file: {sum(len(caps) for caps in video_to_captions.values())}")
     
     # In ra phân phối số lượng caption
     caption_counts = {}
@@ -117,17 +145,17 @@ def prepare_references(annotations):
         count = len(caps)
         caption_counts[count] = caption_counts.get(count, 0) + 1
     
-    logger.info("Phân phối số lượng caption:")
+    logger.info("Caption count distribution:")
     for count, num_videos in sorted(caption_counts.items()):
-        logger.info(f"  {count} caption: {num_videos} videos")
+        logger.info(f"  {count} captions: {num_videos} videos")
     
     # Kiểm tra một vài video cụ thể
     sample_videos = list(video_to_captions.keys())[:3]
     for vid in sample_videos:
-        logger.info(f"Video {vid} có {len(video_to_captions[vid])} caption")
+        logger.info(f"Video {vid} has {len(video_to_captions[vid])} captions")
         
     # Kiểm tra số caption có trong dataset vs số caption được thu thập
-    logger.info(f"So sánh số annotation vs số caption thu thập được:")
+    logger.info(f"Comparing annotation counts vs collected captions:")
     for vid in sample_videos:
         logger.info(f"Video {vid}: {video_count.get(vid, 0)} annotations, {len(video_to_captions[vid])} captions")
     
@@ -176,7 +204,7 @@ def compute_metrics(predictions, references):
 
 def custom_collate_fn(batch):
     """
-    Hàm collate tùy chỉnh để giữ nguyên số lượng caption cho mỗi video
+    Hàm collate tùy chỉnh để giữ nguyên số lượng caption cho mỗi video và kiểm tra input
     """
     # Loại bỏ các None items (videos không tìm thấy)
     batch = [item for item in batch if item is not None]
@@ -188,9 +216,10 @@ def custom_collate_fn(batch):
     videos = torch.stack([item['video'] for item in batch])
     captions = [item['captions'] for item in batch]
     
-    # Log kiểm tra
+    # Kiểm tra và log chi tiết
     caption_lengths = [len(caps) for caps in captions]
-    logger.info(f"custom_collate_fn: Số lượng caption trong batch: {caption_lengths}")
+    logger.info(f"custom_collate_fn: Batch with {len(videos)} videos: {video_ids}")
+    logger.info(f"custom_collate_fn: Video tensor shape: {videos.shape}")
     
     return {
         'video_id': video_ids,
@@ -200,38 +229,38 @@ def custom_collate_fn(batch):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint", type=str, required=True, help="Đường dẫn đến file .pth checkpoint đã training")
+    parser.add_argument("--checkpoint", type=str, required=True, help="Path to .pth checkpoint file")
     parser.add_argument("--timesformer_checkpoint", type=str, 
                         default="/home/student10/.cache/torch/hub/checkpoints/alpro_msrvtt_qa.pth",
-                        help="Đường dẫn đến TimeSformer weights")
+                        help="Path to TimeSformer weights")
     parser.add_argument("--video_dir", type=str, default="datasets/msrvtt/videos",
-                        help="Thư mục chứa video files")
+                        help="Directory containing video files")
     parser.add_argument("--annotation_file", type=str, default="datasets/msrvtt/annotations/cap_test.json",
-                        help="File annotation cho test set")
+                        help="Annotation file for test set")
     parser.add_argument("--output_file", type=str, default="evaluation_results.json",
-                        help="File để lưu kết quả evaluation")
-    parser.add_argument("--batch_size", type=int, default=4, help="Batch size cho mỗi GPU")
-    parser.add_argument("--gpu_id", type=int, default=0, help="GPU ID để sử dụng")
+                        help="File to save evaluation results")
+    parser.add_argument("--batch_size", type=int, default=4, help="Batch size per GPU")
+    parser.add_argument("--gpu_id", type=int, default=0, help="GPU ID to use")
     args = parser.parse_args()
 
     # Kiểm tra GPU
     if not torch.cuda.is_available():
-        raise RuntimeError("CUDA không khả dụng")
+        raise RuntimeError("CUDA not available")
     
     if args.gpu_id >= torch.cuda.device_count():
-        raise RuntimeError(f"GPU {args.gpu_id} không tồn tại. Số GPU khả dụng: {torch.cuda.device_count()}")
+        raise RuntimeError(f"GPU {args.gpu_id} doesn't exist. Available GPUs: {torch.cuda.device_count()}")
 
     device = torch.device(f"cuda:{args.gpu_id}")
     torch.cuda.set_device(args.gpu_id)
     
-    logger.info(f"Sử dụng GPU: {torch.cuda.get_device_name(args.gpu_id)}")
+    logger.info(f"Using GPU: {torch.cuda.get_device_name(args.gpu_id)}")
 
     # 1. Load annotations
     logger.info("Loading annotations...")
     annotations = load_msrvtt_annotations(args.annotation_file)
     video_to_captions = prepare_references(annotations)
     
-    # 2. Khởi tạo model
+    # 2. Initialize model
     model = Blip2TimeSformer(
         vit_model="timesformer",
         img_size=224,
@@ -251,19 +280,19 @@ def main():
     try:
         checkpoint = torch.load(args.checkpoint, map_location="cpu")
         
-        # Kiểm tra cấu trúc checkpoint
+        # Check checkpoint structure
         if "model" in checkpoint:
             state_dict = checkpoint["model"]
         else:
             state_dict = checkpoint
             
-        # Lọc bỏ các weights của visual_encoder để tránh ghi đè lên TimeSformer đã được load
+        # Filter out visual_encoder weights to avoid overriding TimeSformer
         filtered_state_dict = {}
         for key, value in state_dict.items():
             if not key.startswith("visual_encoder"):
                 filtered_state_dict[key] = value
         
-        # Load state dict đã lọc vào model
+        # Load filtered state dict into model
         msg = model.load_state_dict(filtered_state_dict, strict=False)
         logger.info(f"Missing keys: {len(msg.missing_keys)}, Unexpected keys: {len(msg.unexpected_keys)}")
         if msg.missing_keys:
@@ -272,14 +301,14 @@ def main():
             else:
                 logger.info(f"Missing keys: {msg.missing_keys}")
         
-        # Kiểm tra số lượng parameters
+        # Check parameter counts
         visual_encoder_params = len([name for name, _ in model.named_parameters() if "visual_encoder" in name])
-        logger.info(f"parameters của visual_encoder: {visual_encoder_params}")
+        logger.info(f"visual_encoder parameters: {visual_encoder_params}")
         total_params = sum(p.numel() for p in model.parameters())
-        logger.info(f"total parameters của model: {total_params}")
+        logger.info(f"total model parameters: {total_params}")
             
     except Exception as e:
-        logger.error(f"Lỗi khi load checkpoint: {str(e)}")
+        logger.error(f"Error loading checkpoint: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
         exit(1)
@@ -287,7 +316,7 @@ def main():
     model = model.to(device).half()
     model.eval()
 
-    # 4. Chuẩn bị dataset và dataloader
+    # 4. Prepare dataset and dataloader
     video_processor = AlproVideoEvalProcessor(image_size=224, n_frms=8, full_video=True)
     dataset = MSRVTTDataset(args.video_dir, video_to_captions, video_processor)
     dataloader = DataLoader(
@@ -300,15 +329,18 @@ def main():
     )
 
     # 5. Evaluation
-    logger.info("Bắt đầu evaluation...")
+    logger.info("Starting evaluation...")
     
     predictions = []
     references = []
     results = []
+    
+    # Map to store video_id -> predicted_caption to check duplicates
+    video_to_prediction = {}
 
     with torch.no_grad():
-        # Cấu hình tqdm hiển thị trên một dòng duy nhất
-        for batch in tqdm(dataloader, ncols=80, leave=True, position=0):
+        # Configure tqdm to display on a single line
+        for batch_idx, batch in enumerate(tqdm(dataloader, ncols=80, leave=True, position=0)):
             if batch is None:
                 continue
                 
@@ -316,77 +348,96 @@ def main():
             video_ids = batch['video_id']
             captions = batch['captions']
 
-            # Kiểm tra số lượng caption cho mỗi video
+            # Check number of captions for each video
             for vid, caps in zip(video_ids, captions):
-                logger.info(f"Video {vid} có {len(caps)} caption để đánh giá")
-                # Chỉ in ra 2 video đầu tiên để không làm log quá dài
-                break
+                logger.info(f"Video {vid} has {len(caps)} captions for evaluation")
 
-            # Generate captions
-            with torch.amp.autocast(device_type='cuda'):
-                generated_captions = model.generate(
-                    {"video": videos},
-                    use_nucleus_sampling=False,
-                    num_beams=3,
-                    max_length=40,
-                    min_length=10,
-                    top_p=0.9,
-                    repetition_penalty=1.15,
-                )
-
-            # Thu thập kết quả
+            # Generate captions for EACH video SEPARATELY to avoid confusion
+            generated_captions = []
+            for i, vid in enumerate(video_ids):
+                logger.info(f"Generating caption for video {vid} (index {i} in batch {batch_idx})")
+                
+                # Get a specific video from the batch
+                single_video = videos[i:i+1]  # Create batch size 1
+                
+                with torch.amp.autocast(device_type='cuda'):
+                    # Generate caption for a single video
+                    caption = model.generate(
+                        {"video": single_video},
+                        use_nucleus_sampling=False,
+                        num_beams=3,
+                        max_length=40,
+                        min_length=10,
+                        top_p=0.9,
+                        repetition_penalty=1.15,
+                    )[0]  # Take the first (and only) caption from the results
+                    
+                    # Check if this video already has a caption
+                    if vid in video_to_prediction:
+                        logger.warning(f"Video {vid} already has a previous caption: '{video_to_prediction[vid]}'")
+                        logger.warning(f"New caption: '{caption}'")
+                        
+                    # Save caption to check for duplicates
+                    video_to_prediction[vid] = caption
+                    generated_captions.append(caption)
+            
+            # Collect results
             for video_id, pred_caption, ref_captions in zip(video_ids, generated_captions, captions):
-                # Kiểm tra số lượng caption của mỗi video trước khi lưu
-                logger.info(f"Lưu kết quả: Video {video_id} có {len(ref_captions)} caption reference")
+                # Check number of captions for each video before saving
+                logger.info(f"Saving results: Video {video_id} has {len(ref_captions)} reference captions")
                 
                 predictions.append(pred_caption)
                 references.append(ref_captions)
-                # Lưu tất cả caption trong kết quả
+                # Save all captions in results
                 results.append({
                     'video_id': video_id,
                     'predicted_caption': pred_caption,
                     'reference_captions': ref_captions,
-                    'num_references': len(ref_captions)  # Thêm số lượng reference để kiểm tra
+                    'num_references': len(ref_captions)  # Add reference count for verification
                 })
 
-    # 6. Tính toán metrics
-    logger.info("Tính toán metrics...")
-    # Kiểm tra số lượng caption trung bình được sử dụng
-    avg_refs = sum(len(refs) for refs in references) / len(references) if references else 0
-    logger.info(f"Số lượng reference trung bình mỗi video: {avg_refs:.2f}")
+    # Check number of videos with different captions
+    logger.info(f"Total videos processed: {len(video_to_prediction)}")
+    logger.info(f"Total captions generated: {len(predictions)}")
     
-    # Log một số ví dụ
+    # 6. Calculate metrics
+    logger.info("Calculating metrics...")
+    # Check average caption count used
+    avg_refs = sum(len(refs) for refs in references) / len(references) if references else 0
+    logger.info(f"Average references per video: {avg_refs:.2f}")
+    
+    # Log some examples
     if references:
-        logger.info(f"Ví dụ: Video đầu tiên có {len(references[0])} caption")
+        logger.info(f"Example: First video has {len(references[0])} captions")
         
     metrics = compute_metrics(predictions, references)
     
-    # 7. Lưu kết quả
+    # 7. Save results
     output = {
         'metrics': metrics,
         'results': results,
         'avg_references_per_video': avg_refs
     }
     
-    # Kiểm tra số lượng caption trong kết quả
+    # Check caption counts in results
     if results:
         caption_counts = [r['num_references'] for r in results]
-        logger.info(f"Phân phối số lượng caption trong kết quả:")
+        logger.info(f"Caption count distribution in results:")
         unique_counts = sorted(set(caption_counts))
         for count in unique_counts:
             num_videos = caption_counts.count(count)
-            logger.info(f"  {count} caption: {num_videos} videos")
+            logger.info(f"  {count} captions: {num_videos} videos")
         
-        # Kiểm tra một số kết quả cụ thể
+        # Check some specific results
         for i, r in enumerate(results[:3]):
-            logger.info(f"Kết quả {i}: video={r['video_id']}, số caption={r['num_references']}")
+            logger.info(f"Result {i}: video={r['video_id']}, caption count={r['num_references']}")
             if r['num_references'] <= 4:
-                logger.warning(f"  !! Video {r['video_id']} chỉ có {r['num_references']} caption!")
+                logger.warning(f"  !! Video {r['video_id']} only has {r['num_references']} captions!")
     
     with open(args.output_file, 'w') as f:
         json.dump(output, f, indent=2)
     
-    logger.info(f"Kết quả evaluation đã được lưu vào {args.output_file}")
+    logger.info(f"Evaluation results saved to {args.output_file}")
     logger.info("Metrics:")
     for metric, value in metrics.items():
         logger.info(f"{metric}: {value:.4f}")
