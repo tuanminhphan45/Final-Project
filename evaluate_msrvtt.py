@@ -174,6 +174,30 @@ def compute_metrics(predictions, references):
 
     return metrics
 
+def custom_collate_fn(batch):
+    """
+    Hàm collate tùy chỉnh để giữ nguyên số lượng caption cho mỗi video
+    """
+    # Loại bỏ các None items (videos không tìm thấy)
+    batch = [item for item in batch if item is not None]
+    if not batch:
+        return None
+    
+    # Kết hợp các item thành batch
+    video_ids = [item['video_id'] for item in batch]
+    videos = torch.stack([item['video'] for item in batch])
+    captions = [item['captions'] for item in batch]
+    
+    # Log kiểm tra
+    caption_lengths = [len(caps) for caps in captions]
+    logger.info(f"custom_collate_fn: Số lượng caption trong batch: {caption_lengths}")
+    
+    return {
+        'video_id': video_ids,
+        'video': videos,
+        'captions': captions
+    }
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=str, required=True, help="Đường dẫn đến file .pth checkpoint đã training")
@@ -271,7 +295,8 @@ def main():
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=1,
-        pin_memory=True
+        pin_memory=True,
+        collate_fn=custom_collate_fn
     )
 
     # 5. Evaluation
