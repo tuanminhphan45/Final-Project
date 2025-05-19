@@ -6,10 +6,7 @@ import logging
 import argparse
 import numpy as np
 from tqdm import tqdm
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import Dataset, DataLoader
-from torch.utils.data.distributed import DistributedSampler
 from pycocoevalcap.bleu.bleu import Bleu
 from pycocoevalcap.meteor.meteor import Meteor
 from pycocoevalcap.rouge.rouge import Rouge
@@ -54,43 +51,6 @@ class MSRVTTDataset(Dataset):
         except Exception as e:
             logger.error(f"Lỗi khi xử lý video {video_id}: {str(e)}")
             return None
-
-def setup_distributed():
-    """Thiết lập distributed training"""
-    if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
-        rank = int(os.environ['RANK'])
-        world_size = int(os.environ['WORLD_SIZE'])
-        gpu = int(os.environ['LOCAL_RANK'])
-        # Không cần mapping GPU index vì khi sử dụng CUDA_VISIBLE_DEVICES,
-        # các GPU đã được đánh số lại từ 0
-    else:
-        rank = 0
-        world_size = 1
-        gpu = 0  # Default to GPU 0
-
-    # Kiểm tra GPU có tồn tại không
-    if not torch.cuda.is_available():
-        raise RuntimeError("CUDA không khả dụng")
-    
-    if gpu >= torch.cuda.device_count():
-        raise RuntimeError(f"GPU {gpu} không tồn tại. Số GPU khả dụng: {torch.cuda.device_count()}")
-
-    # Set device
-    torch.cuda.set_device(gpu)
-    
-    # Khởi tạo process group
-    try:
-        dist.init_process_group(
-            backend='nccl',
-            init_method='env://',
-            world_size=world_size,
-            rank=rank
-        )
-    except Exception as e:
-        logger.error(f"Lỗi khi khởi tạo process group: {str(e)}")
-        raise
-
-    return rank, world_size, gpu
 
 def load_msrvtt_annotations(annotation_file):
     """Load MSR-VTT annotations"""
@@ -169,15 +129,23 @@ def main():
     parser.add_argument("--output_file", type=str, default="evaluation_results.json",
                         help="File để lưu kết quả evaluation")
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size cho mỗi GPU")
+    parser.add_argument("--gpu_id", type=int, default=0, help="GPU ID để sử dụng")
     args = parser.parse_args()
 
-    # Thiết lập distributed
-    rank, world_size, gpu = setup_distributed()
-    device = torch.device(f"cuda:{gpu}")
+    # Kiểm tra GPU
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA không khả dụng")
+    
+    if args.gpu_id >= torch.cuda.device_count():
+        raise RuntimeError(f"GPU {args.gpu_id} không tồn tại. Số GPU khả dụng: {torch.cuda.device_count()}")
+
+    device = torch.device(f"cuda:{args.gpu_id}")
+    torch.cuda.set_device(args.gpu_id)
+    
+    logger.info(f"Sử dụng GPU: {torch.cuda.get_device_name(args.gpu_id)}")
 
     # 1. Load annotations
-    if rank == 0:
-        logger.info("Loading annotations...")
+    logger.info("Loading annotations...")
     annotations = load_msrvtt_annotations(args.annotation_file)
     video_to_captions = prepare_references(annotations)
     
@@ -197,8 +165,7 @@ def main():
     )
 
     # 3. Load checkpoint
-    if rank == 0:
-        logger.info(f"Loading checkpoint {args.checkpoint}")
+    logger.info(f"Loading checkpoint {args.checkpoint}")
     try:
         checkpoint = torch.load(args.checkpoint, map_location="cpu")
         
@@ -216,53 +183,48 @@ def main():
         
         # Load state dict đã lọc vào model
         msg = model.load_state_dict(filtered_state_dict, strict=False)
-        if rank == 0:
-            logger.info(f"Missing keys: {len(msg.missing_keys)}, Unexpected keys: {len(msg.unexpected_keys)}")
-            if msg.missing_keys:
-                if len(msg.missing_keys) > 5:
-                    logger.info(f"missing keys: {msg.missing_keys[:5]}...")
-                else:
-                    logger.info(f"Missing keys: {msg.missing_keys}")
-            
-            # Kiểm tra số lượng parameters
-            visual_encoder_params = len([name for name, _ in model.named_parameters() if "visual_encoder" in name])
-            logger.info(f"parameters của visual_encoder: {visual_encoder_params}")
-            total_params = sum(p.numel() for p in model.parameters())
-            logger.info(f"total parameters của model: {total_params}")
+        logger.info(f"Missing keys: {len(msg.missing_keys)}, Unexpected keys: {len(msg.unexpected_keys)}")
+        if msg.missing_keys:
+            if len(msg.missing_keys) > 5:
+                logger.info(f"missing keys: {msg.missing_keys[:5]}...")
+            else:
+                logger.info(f"Missing keys: {msg.missing_keys}")
+        
+        # Kiểm tra số lượng parameters
+        visual_encoder_params = len([name for name, _ in model.named_parameters() if "visual_encoder" in name])
+        logger.info(f"parameters của visual_encoder: {visual_encoder_params}")
+        total_params = sum(p.numel() for p in model.parameters())
+        logger.info(f"total parameters của model: {total_params}")
             
     except Exception as e:
         logger.error(f"Lỗi khi load checkpoint: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
-        dist.destroy_process_group()
         exit(1)
 
     model = model.to(device).half()
-    model = DDP(model, device_ids=[gpu])
+    model.eval()
 
     # 4. Chuẩn bị dataset và dataloader
     video_processor = AlproVideoEvalProcessor(image_size=224, n_frms=8, full_video=True)
     dataset = MSRVTTDataset(args.video_dir, video_to_captions, video_processor)
-    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank)
     dataloader = DataLoader(
         dataset,
         batch_size=args.batch_size,
-        sampler=sampler,
+        shuffle=False,
         num_workers=4,
         pin_memory=True
     )
 
     # 5. Evaluation
-    if rank == 0:
-        logger.info("Bắt đầu evaluation...")
+    logger.info("Bắt đầu evaluation...")
     
-    model.eval()
     predictions = []
     references = []
     results = []
 
     with torch.no_grad():
-        for batch in tqdm(dataloader, disable=rank != 0):
+        for batch in tqdm(dataloader):
             if batch is None:
                 continue
                 
@@ -272,7 +234,7 @@ def main():
 
             # Generate captions
             with torch.amp.autocast(device_type='cuda'):
-                generated_captions = model.module.generate(
+                generated_captions = model.generate(
                     {"video": videos},
                     use_nucleus_sampling=False,
                     num_beams=3,
@@ -292,40 +254,23 @@ def main():
                     'reference_captions': ref_captions
                 })
 
-    # 6. Gather results từ tất cả các GPU
-    all_predictions = [None for _ in range(world_size)]
-    all_references = [None for _ in range(world_size)]
-    all_results = [None for _ in range(world_size)]
+    # 6. Tính toán metrics
+    logger.info("Tính toán metrics...")
+    metrics = compute_metrics(predictions, references)
     
-    dist.all_gather_object(all_predictions, predictions)
-    dist.all_gather_object(all_references, references)
-    dist.all_gather_object(all_results, results)
-
-    if rank == 0:
-        # Flatten results
-        all_predictions = [p for preds in all_predictions for p in preds]
-        all_references = [r for refs in all_references for r in refs]
-        all_results = [r for res in all_results for r in res]
-
-        # 7. Tính toán metrics
-        logger.info("Tính toán metrics...")
-        metrics = compute_metrics(all_predictions, all_references)
-        
-        # 8. Lưu kết quả
-        output = {
-            'metrics': metrics,
-            'results': all_results
-        }
-        
-        with open(args.output_file, 'w') as f:
-            json.dump(output, f, indent=2)
-        
-        logger.info(f"Kết quả evaluation đã được lưu vào {args.output_file}")
-        logger.info("Metrics:")
-        for metric, value in metrics.items():
-            logger.info(f"{metric}: {value:.4f}")
-
-    dist.destroy_process_group()
+    # 7. Lưu kết quả
+    output = {
+        'metrics': metrics,
+        'results': results
+    }
+    
+    with open(args.output_file, 'w') as f:
+        json.dump(output, f, indent=2)
+    
+    logger.info(f"Kết quả evaluation đã được lưu vào {args.output_file}")
+    logger.info("Metrics:")
+    for metric, value in metrics.items():
+        logger.info(f"{metric}: {value:.4f}")
 
 if __name__ == "__main__":
     main() 
