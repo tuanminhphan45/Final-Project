@@ -270,7 +270,8 @@ def main():
     results = []
 
     with torch.no_grad():
-        for batch in tqdm(dataloader):
+        # Cấu hình tqdm hiển thị trên một dòng duy nhất
+        for batch in tqdm(dataloader, ncols=80, leave=True, position=0):
             if batch is None:
                 continue
                 
