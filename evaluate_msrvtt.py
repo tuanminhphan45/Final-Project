@@ -60,13 +60,28 @@ def setup_distributed():
         world_size = 1
         gpu = 1  # Default to GPU 1
 
+    # Kiểm tra GPU có tồn tại không
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA không khả dụng")
+    
+    if gpu >= torch.cuda.device_count():
+        raise RuntimeError(f"GPU {gpu} không tồn tại. Số GPU khả dụng: {torch.cuda.device_count()}")
+
+    # Set device
     torch.cuda.set_device(gpu)
-    dist.init_process_group(
-        backend='nccl',
-        init_method='env://',
-        world_size=world_size,
-        rank=rank
-    )
+    
+    # Khởi tạo process group
+    try:
+        dist.init_process_group(
+            backend='nccl',
+            init_method='env://',
+            world_size=world_size,
+            rank=rank
+        )
+    except Exception as e:
+        logger.error(f"Lỗi khi khởi tạo process group: {str(e)}")
+        raise
+
     return rank, world_size, gpu
 
 def load_msrvtt_annotations(annotation_file):
