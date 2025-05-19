@@ -258,7 +258,7 @@ def main():
         dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=1,
         pin_memory=True
     )
 
