@@ -70,20 +70,54 @@ def load_msrvtt_annotations(annotation_file):
 def prepare_references(annotations):
     """Chuẩn bị references cho mỗi video"""
     video_to_captions = {}
+    
+    # Đếm số lượng annotation cho mỗi video để kiểm tra
+    video_count = {}
+    
     for item in annotations:
-        # Sử dụng trường 'video' thay vì 'video_id'
+        # Sử dụng trường 'video' hoặc 'image_id' làm video_id
         video_id = item.get('video', item.get('image_id'))
         
         # Loại bỏ đuôi .mp4 nếu có
-        if video_id.endswith('.mp4'):
+        if video_id and isinstance(video_id, str) and video_id.endswith('.mp4'):
             video_id = video_id[:-4]
+            
+        if not video_id:
+            continue
+            
+        # Đếm số lượng annotation
+        video_count[video_id] = video_count.get(video_id, 0) + 1
             
         if video_id not in video_to_captions:
             video_to_captions[video_id] = []
-        video_to_captions[video_id].append(item['caption'])
+            
+        # Kiểm tra xem caption có tồn tại không
+        if 'caption' in item and item['caption']:
+            video_to_captions[video_id].append(item['caption'])
     
-    # Log thông tin số lượng video và caption
-    logger.info(f"Đã load {len(video_to_captions)} videos với tổng cộng {sum(len(caps) for caps in video_to_captions.values())} captions")
+    # Log thông tin chi tiết
+    logger.info(f"Tổng số videos trong file: {len(video_to_captions)}")
+    logger.info(f"Tổng số caption trong file: {sum(len(caps) for caps in video_to_captions.values())}")
+    
+    # In ra phân phối số lượng caption
+    caption_counts = {}
+    for vid, caps in video_to_captions.items():
+        count = len(caps)
+        caption_counts[count] = caption_counts.get(count, 0) + 1
+    
+    logger.info("Phân phối số lượng caption:")
+    for count, num_videos in sorted(caption_counts.items()):
+        logger.info(f"  {count} caption: {num_videos} videos")
+    
+    # Kiểm tra một vài video cụ thể
+    sample_videos = list(video_to_captions.keys())[:3]
+    for vid in sample_videos:
+        logger.info(f"Video {vid} có {len(video_to_captions[vid])} caption")
+        
+    # Kiểm tra số caption có trong dataset vs số caption được thu thập
+    logger.info(f"So sánh số annotation vs số caption thu thập được:")
+    for vid in sample_videos:
+        logger.info(f"Video {vid}: {video_count.get(vid, 0)} annotations, {len(video_to_captions[vid])} captions")
     
     return video_to_captions
 
