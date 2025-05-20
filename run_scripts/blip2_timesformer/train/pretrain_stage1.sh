@@ -11,4 +11,4 @@ python -m torch.distributed.run \
     --nproc_per_node=3 \
     --master_port=${MASTER_PORT} \
     train.py \
-    --cfg-path lavis/projects/blip2_timesformer/train/pretrain_stage1.yaml \
+    --cfg-path lavis/projects/blip2_timesformer/train/train_256.yaml \
