@@ -43,7 +43,7 @@ model:
     use_grad_checkpointing: False
     vit_precision: "fp16"
     freeze_vit: True
-    num_query_token: 128  
+    num_query_token: 256  
     cross_attention_freq: 2  
 
 run:
