@@ -2,7 +2,6 @@ model:
   arch: pretrain
   load_finetuned: False
   vit_model: timesformer
-  pretrained: "/storage/student10/vidcaption/LAVIS/lavis/output/BLIP2_TimeSformer/pretrain_stage1/20250514134/checkpoint_9.pth"
   image_size: 224
   num_frames: 8
   drop_path_rate: 0.1
@@ -16,6 +15,7 @@ model:
   embed_dim: 768
   max_txt_len: 32
     
+  #timesformer_pretrained: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/ALPRO/alpro_msrvtt_qa.pth"
   timesformer:
     image_size: 224
     patch_size: 16

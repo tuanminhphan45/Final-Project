@@ -49,10 +49,10 @@ class CaptionTask(BaseTask):
         num_beams = run_cfg.get("num_beams", 5)
         max_len = run_cfg.get("max_len", 30)
         min_len = run_cfg.get("min_len", 1)
-        repetition_penalty = run_cfg.get("repetition_penalty", 1.0)
-        length_penalty = run_cfg.get("length_penalty", 1.0)
+        repetition_penalty = run_cfg.get("repetition_penalty", 1.15)
+        length_penalty = run_cfg.get("length_penalty", 0.)
         top_p = run_cfg.get("top_p", 0.9)
-        temperature = run_cfg.get("temperature", 1.0)
+        temperature = run_cfg.get("temperature", 1.)
         evaluate = run_cfg.evaluate
 
         report_metric = run_cfg.get("report_metric", True)
@@ -105,19 +105,17 @@ class CaptionTask(BaseTask):
 
     def valid_step(self, model, samples):
         results = []
-        
-        # Lấy tham số từ cấu hình task
-        use_nucleus_sampling = False  # Mặc định dùng beam search
+        # run_cfg = slf.cfg.run_cfg
         captions = model.generate(
             samples,
-            use_nucleus_sampling=use_nucleus_sampling,
+            use_nucleus_sampling=False,
             num_beams=self.num_beams,
             max_length=self.max_len,
             min_length=self.min_len,
             repetition_penalty=self.repetition_penalty,
-            length_penalty=getattr(self, 'length_penalty', 1.0),  # Hỗ trợ tham số mới
+            #length_penalty=self.length_penalty,
             top_p=self.top_p,
-            temperature=getattr(self, 'temperature', 1.0),  # Hỗ trợ tham số mới
+            #temperature=self.temperature,
         )
         img_ids = samples[self.sample_id_key]
         for caption, img_id in zip(captions, img_ids):

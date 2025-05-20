@@ -1,14 +1,14 @@
 model:
   arch: blip2_timesformer
-  model_type: pretrain
+  model_type: caption_msrvtt
 
 
 datasets:
-  msrvtt_caption:  # name of the dataset builder
+  msrvtt:  # name of the dataset builder
     vis_processor:
         eval:
           name: "alpro_video_eval"
-          n_frms: 8
+          n_frms: 16
           image_size: 224
     text_processor:
         eval:
@@ -18,15 +18,11 @@ run:
   task: captioning
   batch_size_train: 16
   batch_size_eval: 8
-  num_workers: 3
+  num_workers: 4
+
   max_len: 30
-  min_len: 10
-  num_beams: 3
-  report_metric: True
-  annotation_file: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/cap_test.json"
-  load_gt_from_file: True
-  sample_id_key: "video_id"
-  caption_key: "caption"
+  min_len: 8
+  num_beams: 5
 
   seed: 42
   output_dir: "output/BLIP2_TimeSformer/Caption_msrvtt"

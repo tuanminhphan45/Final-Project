@@ -336,14 +336,12 @@ class Blip2TimeSformer(Blip2Base):
     def generate(
         self,
         samples,
-        use_nucleus_sampling: bool = False,
+        use_nucleus_sampling: bool = True,
         num_beams: int = 3,
         max_length: int = 50,
         min_length: int = 10,
         top_p: float = 0.9,
         repetition_penalty: float = 1.0,
-        length_penalty: float = 1.0,
-        temperature: float = 1.0,
     ):
         """
         Generate captions for video input.
@@ -356,7 +354,6 @@ class Blip2TimeSformer(Blip2Base):
             top_p: nucleus sampling probability mass.
             repetition_penalty: penalize repeated tokens.
             length_penalty: beam-search length penalty.
-            temperature: temperature for sampling (higher = more diverse).
         Returns:
             List[str]: decoded captions of length B.
         """
@@ -410,9 +407,6 @@ class Blip2TimeSformer(Blip2Base):
             num_beams=num_beams,
             do_sample=use_nucleus_sampling,
             top_p=top_p,
-            temperature=temperature,
-            length_penalty=length_penalty,
-            repetition_penalty=repetition_penalty,
             eos_token_id=self.tokenizer.sep_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
             **model_kwargs
@@ -603,24 +597,7 @@ class Blip2TimeSformer(Blip2Base):
             max_txt_len=max_txt_len,
         )
         
-        
-        model.config = cfg
-        
-        # Nếu có checkpoint được chỉ định, tải và ghi log
-        # pretrained_path = cfg.get("pretrained", None)
-        # if pretrained_path:
-        #     logging.info(f"Load checkpoint from {pretrained_path}")
-        #     if os.path.isfile(pretrained_path):
-        #         model.checkpoint_path = pretrained_path
-        #         msg = model.load_checkpoint(pretrained_path)
-        #         logging.info(f"Load checkpoint ok: {pretrained_path}")
-        #     else:
-        #         logging.warning(f"Dont have file checkpoint: {pretrained_path}")
-        #         model.checkpoint_path = None
-        # else:
-        #     model.checkpoint_path = None
-        
-        # return model
+        return model
 
     def compute_sim_matrix(self, data_loader, task_cfg):
         """

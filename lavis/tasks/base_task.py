@@ -7,7 +7,6 @@
 
 import logging
 import os
-import datetime
 
 import torch
 import torch.distributed as dist
@@ -83,46 +82,9 @@ class BaseTask:
         
         logger.info("=== CHUẨN BỊ MODEL TRƯỚC KHI ĐÁNH GIÁ ===")
         
-        # Kiểm tra và log thông tin về checkpoint được tải
-        checkpoint_path = None
-        if hasattr(model, "checkpoint_path"):
-            checkpoint_path = model.checkpoint_path
-        
-        if checkpoint_path:
-            logger.info(f"✓ Checkpoint đã được tải từ: {checkpoint_path}")
-            # Lấy thông tin về file checkpoint
-            if os.path.exists(checkpoint_path):
-                checkpoint_size = os.path.getsize(checkpoint_path) / (1024 * 1024)  # Convert to MB
-                checkpoint_modified = os.path.getmtime(checkpoint_path)
-                modified_time = datetime.datetime.fromtimestamp(checkpoint_modified).strftime('%Y-%m-%d %H:%M:%S')
-                logger.info(f"✓ Kích thước checkpoint: {checkpoint_size:.2f} MB")
-                logger.info(f"✓ Thời gian sửa đổi: {modified_time}")
-        elif hasattr(model, "config") and hasattr(model.config, "get") and callable(model.config.get):
-            pretrained_path = model.config.get("pretrained", "Không có")
-            logger.info(f"✓ Đường dẫn checkpoint được chỉ định: {pretrained_path}")
-        else:
-            logger.warning("⚠️ Không tìm thấy thông tin về checkpoint!")
-        
-        # Đếm số lượng tham số trong model
-        total_params = 0
-        trainable_params = 0
-        for name, param in model.named_parameters():
-            num_params = param.numel()
-            total_params += num_params
-            if param.requires_grad:
-                trainable_params += num_params
-        
-        logger.info(f"✓ Tổng số tham số: {total_params:,}")
-        logger.info(f"✓ Số tham số có thể huấn luyện: {trainable_params:,}")
-        logger.info(f"✓ Tỉ lệ tham số được đóng băng: {(1 - trainable_params/total_params)*100:.1f}%")
-        
         # Kiểm tra model là Blip2TimeSformer hay không
         if hasattr(model, "visual_encoder") and hasattr(model, "Qformer"):
             logger.info("✓ Model là Blip2 với TimeSformer")
-            
-            # Log thông tin về trạng thái khởi tạo của model
-            if hasattr(model, "vit_name"):
-                logger.info(f"✓ Loại visual encoder: {model.vit_name}")
             
             # Kiểm tra trạng thái TimeSformer weights
             if hasattr(model.visual_encoder, "model") and hasattr(model.visual_encoder.model, "pos_embed"):
@@ -137,10 +99,6 @@ class BaseTask:
             else:
                 logger.warning("⚠️ TimeSformer không có weights hoặc structure không đúng!")
             
-            # Thông tin về số lượng layers trong TimeSformer
-            if hasattr(model.visual_encoder, "model") and hasattr(model.visual_encoder.model, "blocks"):
-                logger.info(f"✓ TimeSformer số blocks: {len(model.visual_encoder.model.blocks)}")
-                
             # Kiểm tra chi tiết về QFormer weights
             if hasattr(model, "query_tokens"):
                 logger.info(f"✓ Qformer số query tokens: {model.query_tokens.shape[1]}")

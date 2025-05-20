@@ -27,7 +27,7 @@ def main():
     model = Blip2TimeSformer(
         vit_model="timesformer",
         img_size=224,
-        num_frames=8,
+        num_frames=16,
         drop_path_rate=0.1,
         use_grad_checkpointing=False,
         vit_precision="fp16",
@@ -35,11 +35,12 @@ def main():
         num_query_token=128,
         cross_attention_freq=2,
         embed_dim=768,
-        max_txt_len=32, 
+        max_txt_len=32,
+        timesformer_weight_path=args.timesformer_checkpoint,  # Load TimeSformer weights trong constructor
     )
 
     # 2. Load checkpoint đã training
-    logger.info(f"Loading checkpoint {args.checkpoint}")
+    logger.info(f"Loading checkpoint từ {args.checkpoint}")
     try:
         checkpoint = torch.load(args.checkpoint, map_location="cpu")
         
@@ -60,15 +61,17 @@ def main():
         logger.info(f"Missing keys: {len(msg.missing_keys)}, Unexpected keys: {len(msg.unexpected_keys)}")
         if msg.missing_keys:
             if len(msg.missing_keys) > 5:
-                logger.info(f"missing keys: {msg.missing_keys[:5]}...")
+                logger.info(f"Một số missing keys: {msg.missing_keys[:5]}...")
             else:
                 logger.info(f"Missing keys: {msg.missing_keys}")
+            
+        logger.info("Đã load checkpoint thành công")
         
         # Kiểm tra số lượng parameters
         visual_encoder_params = len([name for name, _ in model.named_parameters() if "visual_encoder" in name])
-        logger.info(f"parameters của visual_encoder: {visual_encoder_params}")
+        logger.info(f"Số lượng parameters của visual_encoder: {visual_encoder_params}")
         total_params = sum(p.numel() for p in model.parameters())
-        logger.info(f"total parameters của model: {total_params}")
+        logger.info(f"Tổng số parameters của model: {total_params}")
         
     except Exception as e:
         logger.error(f"Lỗi khi load checkpoint: {str(e)}")
@@ -81,7 +84,7 @@ def main():
     model.eval()
 
     # 4. Chuẩn bị video processor
-    video_processor = AlproVideoEvalProcessor(image_size=224, n_frms=8, full_video=True)
+    video_processor = AlproVideoEvalProcessor(image_size=224, n_frms=16, full_video=True)
 
     # 5. Xử lý video
     processed = video_processor(args.video)                         # [C,T,H,W]
@@ -94,12 +97,14 @@ def main():
             {"video": batch},
             use_nucleus_sampling=False,
             num_beams=3,
-            max_length=30,
+            max_length=50,
             min_length=10,
             top_p=0.9,
             repetition_penalty=1.15,
         )[0]
 
+    # 7. In kết quả
+    print("\n--- KẾT QUẢ ---")
     print(f"Video: {args.video}")
     print(f"Caption: {caption}")
 
