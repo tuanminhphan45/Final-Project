@@ -1,0 +1,88 @@
+datasets:
+    msrvtt_caption:
+        data_type: videos
+        build_info:
+            annotations:
+                train:
+                    storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/cap_train.json"
+                val:
+                    storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/cap_val.json"
+                test:
+                    storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/annotations/cap_test.json"
+            videos:
+                storage: "/storage/student10/vidcaption/LAVIS/datasets/msrvtt/videos"
+        vis_processor:
+            train:
+                name: "alpro_video_train"
+                image_size: 224
+                n_frms: 8  # Giảm từ 16 xuống 8 frames
+            eval:
+                name: "alpro_video_eval"
+                image_size: 224
+                n_frms: 8  # Giảm từ 16 xuống 8 frames
+        text_processor:
+            train:
+                name: "blip_caption"
+            eval:
+                name: "blip_caption"
+
+model:
+    arch: blip2_timesformer
+    model_type: pretrain
+
+    timesformer:
+        image_size: 224
+        patch_size: 16
+        num_frames: 8  
+        attn_drop_rate: 0.1  
+        drop_rate: 0.1
+        drop_path_rate: 0.1
+
+    image_size: 224
+    drop_path_rate: 0
+    use_grad_checkpointing: False
+    vit_precision: "fp16"
+    freeze_vit: True
+    num_query_token: 256  
+    cross_attention_freq: 2  
+
+run:
+    task: "captioning"
+    batch_size_train: 16  
+    batch_size_eval: 8  
+    num_workers: 4
+    load_gt_from_file: true
+    annotation_file: "/storage/student10/vidcaption/LAVIS/cache/msrvtt_caption_gt/msrvtt_caption_test_annotations.json"
+    max_epoch: 10  
+    lr_sched: "linear_warmup_cosine_lr"
+    init_lr: 5e-5  
+    min_lr: 1e-6  
+
+    seed: 42
+    output_dir: "output/BLIP2_TimeSformer/pretrain_stage1"
+
+    optimizer:
+        name: adamw
+        lr: 5e-5  
+        weight_decay: 0.01  
+        beta1: 0.9
+        beta2: 0.999
+
+    scheduler:
+        name: cosine
+        num_warmup_steps: 1000  
+
+    amp: True
+    resume_ckpt_path: null
+
+    evaluate: False
+    train_splits: ["train"]
+    # valid_splits: ["val"]
+    #test_splits: ["test"]
+
+    device: "cuda"
+    world_size: 3
+    dist_url: "env://"
+    distributed: True
+
+    warmup_steps: 1000  
