@@ -157,3 +157,6 @@ debug*/
 *.pdf
 
 cache/
+*.pt
+*.pyth
+*.pth
