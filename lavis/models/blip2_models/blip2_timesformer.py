@@ -597,6 +597,19 @@ class Blip2TimeSformer(Blip2Base):
             max_txt_len=max_txt_len,
         )
         
+        pretrained_path = cfg.get("pretrained", None)
+        if pretrained_path:
+            logging.info(f"Load checkpoint from {pretrained_path}")
+            if os.path.isfile(pretrained_path):
+                model.checkpoint_path = pretrained_path
+                msg = model.load_checkpoint(pretrained_path)
+                logging.info(f"Load checkpoint ok: {pretrained_path}")
+            else:
+                logging.warning(f"Dont have file checkpoint: {pretrained_path}")
+                model.checkpoint_path = None
+        else:
+            model.checkpoint_path = None
+        
         return model
 
     def compute_sim_matrix(self, data_loader, task_cfg):
