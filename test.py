@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--timesformer_checkpoint", type=str, 
                         default="/home/student10/.cache/torch/hub/checkpoints/alpro_msrvtt_qa.pth",
                         help="Đường dẫn đến TimeSformer weights")
+    parser.add_argument("--query", type=int, default=128, help="Số lượng query tokens")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -32,11 +33,10 @@ def main():
         use_grad_checkpointing=False,
         vit_precision="fp16",
         freeze_vit=True,
-        num_query_token=128,
+        num_query_token=args.query,
         cross_attention_freq=2,
         embed_dim=768,
-        max_txt_len=32,
-        timesformer_weight_path=args.timesformer_checkpoint,  # Load TimeSformer weights trong constructor
+        max_txt_len=32,  # Load TimeSformer weights trong constructor
     )
 
     # 2. Load checkpoint đã training
