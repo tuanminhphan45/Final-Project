@@ -269,7 +269,7 @@ def main():
         use_grad_checkpointing=False,
         vit_precision="fp16",
         freeze_vit=True,
-        num_query_token=256,
+        num_query_token=512,
         cross_attention_freq=2,
         embed_dim=768,
         max_txt_len=32,
@@ -366,10 +366,10 @@ def main():
                         {"video": single_video},
                         use_nucleus_sampling=False,
                         num_beams=3,
-                        max_length=30,
+                        max_length=50,
                         min_length=10,
                         top_p=0.9,
-                        repetition_penalty=1.15,
+                        repetition_penalty=1,
                     )[0]  # Take the first (and only) caption from the results
                     
                     # Check if this video already has a caption
