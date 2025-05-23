@@ -97,8 +97,8 @@ def main():
             {"video": batch},
             use_nucleus_sampling=False,
             num_beams=3,
-            max_length=50,
-            min_length=10,
+            max_length=150,
+            min_length=50,
             top_p=0.9,
             repetition_penalty=1.15,
         )[0]
