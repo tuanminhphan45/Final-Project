@@ -269,7 +269,7 @@ def main():
         use_grad_checkpointing=False,
         vit_precision="fp16",
         freeze_vit=True,
-        num_query_token=512,
+        num_query_token=1024,
         cross_attention_freq=2,
         embed_dim=768,
         max_txt_len=32,
